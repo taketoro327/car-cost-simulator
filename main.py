@@ -35,15 +35,16 @@ with st.container(border=True):
         
     st.divider()
     
-    # 【修正】セレクトボックスからラジオボタンに変更し、横幅いっぱいを使って縦に並べる
+    # 【修正】共通条件はタイトルとhelpにまとめ、選択肢を短縮してラジオボタン化
     ins_type = st.radio(
-        "保険プラン", 
+        "保険プラン（※全プラン対人対物無制限）", 
         options=[
-            "基本プラン（対人対物無制限）", 
-            "安心プラン（対人対物無制限 ＋ 車両保険エコノミー）", 
-            "万全プラン（対人対物無制限 ＋ 車両保険一般）"
+            "基本プラン（車両保険なし）", 
+            "安心プラン（＋車両エコノミー）", 
+            "万全プラン（＋車両一般）"
         ], 
-        index=1
+        index=1,
+        help="【全プラン共通】対人・対物賠償は無制限です。\n\n【車両補償の違い】\n・基本プラン：車両補償なし\n・安心プラン：車対車＋限定危険（自損や当て逃げは対象外）\n・万全プラン：一般条件（自損や当て逃げもカバー）"
     )
 
     st.divider()
@@ -67,6 +68,7 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, ch
     shaken = (years // 2) * (60000 if is_kei else 100000)
     
     base_ins = (35000 if is_kei else 45000)
+    # 文字列を短縮しても「万全」「安心」のキーワードが含まれているのでロジックは正常に機能します
     ins_rate = 0.025 if "万全" in ins_type else (0.015 if "安心" in ins_type else 0.0)
     ins_total = (base_ins + (price * ins_rate)) * years
     
