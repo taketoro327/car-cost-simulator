@@ -3,11 +3,10 @@ import streamlit as st
 # ページ設定
 st.set_page_config(page_title="賢者の車選びシミュレーター", page_icon="🚗")
 
-# デザイン設定（ダークモード・ライトモード両対応に修正）
+# デザイン設定
 st.markdown("""
     <style>
     .block-container { max-width: 800px; padding-top: 2rem; }
-    /* 背景色を環境に合わせて馴染む「半透明のグレー」に変更しました */
     .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; }
     [data-testid="stMetricValue"] { font-size: 2rem !important; }
     </style>
@@ -83,20 +82,45 @@ col_v1, col_v2 = st.columns(2)
 with col_v1:
     with st.container(border=True):
         st.subheader("【A】軽自動車")
-        k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, format="%d", key="k_p")
-        k_m = st.number_input("実用燃費 (km/L)", value=20.0, step=1.0, key="k_m")
+        
+        # 【追加】状態・年式の選択
+        k_age = st.selectbox("車両の状態・年式", ["新車（最新モデル）", "中古（3〜5年落ち程度）", "中古（10年落ち程度）"], key="k_age")
+        if "新車" in k_age:
+            k_is_new = True; k_default_p = 2000000; k_default_m = 22.0
+        elif "3〜5年" in k_age:
+            k_is_new = False; k_default_p = 1200000; k_default_m = 18.0
+        else:
+            k_is_new = False; k_default_p = 500000; k_default_m = 14.0
+            
+        k_p = st.number_input("購入価格 (円)", value=k_default_p, step=100000, format="%d", key="k_p")
+        
+        # 状態に合わせて燃費の初期値が連動
+        k_m = st.number_input("実用燃費 (km/L)", value=k_default_m, step=1.0, key="k_m", help="選択した年式に合わせた目安が入っています。手動で変更可能です。")
         
         st.markdown("<div style='height: 70px;'>※タイヤは軽自動車標準サイズを想定</div>", unsafe_allow_html=True)
         
-        k_total, k_resale = calc_all(k_p, k_m, True, True, is_resale_included, 35000, 20000, 6000)
+        # k_is_new を判定に渡す
+        k_total, k_resale = calc_all(k_p, k_m, True, k_is_new, is_resale_included, 35000, 20000, 6000)
         if is_resale_included:
             st.info(f"💡 {years}年後の予想売却価格: **{k_resale:,}円**")
 
 with col_v2:
     with st.container(border=True):
         st.subheader("【B】普通車")
-        s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, format="%d", key="s_p")
-        s_m = st.number_input("実用燃費 (km/L)", value=15.0, step=1.0, key="s_m")
+        
+        # 【追加】状態・年式の選択
+        s_age = st.selectbox("車両の状態・年式", ["新車（最新モデル）", "中古（3〜5年落ち程度）", "中古（10年落ち程度）"], index=1, key="s_age")
+        if "新車" in s_age:
+            s_is_new = True; s_default_p = 3500000; s_default_m = 20.0
+        elif "3〜5年" in s_age:
+            s_is_new = False; s_default_p = 2000000; s_default_m = 15.0
+        else:
+            s_is_new = False; s_default_p = 800000; s_default_m = 10.0
+            
+        s_p = st.number_input("購入価格 (円)", value=s_default_p, step=100000, format="%d", key="s_p")
+        
+        # 状態に合わせて燃費の初期値が連動
+        s_m = st.number_input("実用燃費 (km/L)", value=s_default_m, step=1.0, key="s_m", help="選択した年式に合わせた目安が入っています。手動で変更可能です。")
         
         s_tire_size = st.selectbox("タイヤサイズ", [
             "15インチ以下（コンパクトカー等）", 
@@ -111,7 +135,8 @@ with col_v2:
         else:
             s_t_unit = 120000; s_w_price = 80000; s_c_fee = 12000
             
-        s_total, s_resale = calc_all(s_p, s_m, False, False, is_resale_included, s_t_unit, s_w_price, s_c_fee)
+        # s_is_new を判定に渡す
+        s_total, s_resale = calc_all(s_p, s_m, False, s_is_new, is_resale_included, s_t_unit, s_w_price, s_c_fee)
         if is_resale_included:
             st.info(f"💡 {years}年後の予想売却価格: **{s_resale:,}円**")
 
@@ -135,7 +160,7 @@ with st.expander("🧮 賢者の計算根拠・前提条件"):
     st.markdown(f"""
     本シミュレーターは以下の条件で算出しています。
     
-    * **車両実質負担額**: {resale_text} をベースに計算。
+    * **車両実質負担額**: {resale_text} をベースに計算。新車・中古の選択により残価率が異なります。
     * **燃料代**: 走行距離 ÷ 実用燃費 × ガソリン単価 で算出。
     * **自動車税**: 軽自動車 10,800円/年、普通車 30,500円/年。
     * **車検代**: 2年に1回（軽: 6万、普通: 10万）と仮定。
