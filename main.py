@@ -3,7 +3,7 @@ import streamlit as st
 # ページ設定
 st.set_page_config(page_title="賢者の車選びシミュレーター", page_icon="🚗")
 
-# デザイン
+# デザイン設定
 st.markdown("""
     <style>
     .block-container { max-width: 800px; padding-top: 2rem; }
@@ -20,17 +20,11 @@ with st.container(border=True):
     col_base1, col_base2 = st.columns(2)
     
     with col_base1:
-        # 【修正】スライドからドラムロール（selectbox）に変更
-        years_options = [3, 4, 5, 6, 7, 8, 9, 10]
-        years = st.selectbox("保有予定期間 (年)", options=years_options, index=2) # 初期値を5年に設定
-        
+        years = st.selectbox("保有予定期間 (年)", options=[3, 4, 5, 6, 7, 8, 9, 10], index=2)
         dist = st.number_input("年間走行距離 (km)", value=10000, step=1000)
         
     with col_base2:
-        # 【修正】ガソリン単価もドラムロールに変更（5円刻みなど）
-        gas_options = list(range(150, 201, 5))
-        gas = st.selectbox("ガソリン単価 (円/L)", options=gas_options, index=5) # 初期値を175円に設定
-        
+        gas = st.selectbox("ガソリン単価 (円/L)", options=list(range(150, 201, 5)), index=5)
         ins_type = st.selectbox("保険プラン", [
             "基本プラン（対人対物無制限）", 
             "安心プラン（対人対物無制限＋車両保険エコノミー）", 
@@ -42,10 +36,9 @@ with st.container(border=True):
     with col_tire1:
         is_winter = st.toggle("スタッドレスタイヤを使用", value=True)
     with col_tire2:
-        # 【修正】冬タイヤ期間もドラムロールに変更
         w_months = st.selectbox("冬タイヤ装着期間 (ヶ月)", options=[1, 2, 3, 4, 5, 6], index=2) if is_winter else 0
 
-# --- 計算ロジック（変更なし） ---
+# --- 計算ロジック ---
 def get_resale(p, y, is_new):
     r = {3:0.6, 5:0.4, 7:0.2, 10:0.05} if is_new else {3:0.45, 5:0.25, 7:0.15, 10:0.03}
     return p * r.get(y, 0.1)
@@ -57,21 +50,13 @@ def calc_all(price, mpg, is_kei, is_new):
     shaken = (years // 2) * (60000 if is_kei else 100000)
     
     base_ins = (35000 if is_kei else 45000)
-    if "万全プラン" in ins_type:
-        ins_rate = 0.025
-    elif "安心プラン" in ins_type:
-        ins_rate = 0.015
-    else:
-        ins_rate = 0.0
-    
+    ins_rate = 0.025 if "万全" in ins_type else (0.015 if "安心" in ins_type else 0.0)
     ins_total = (base_ins + (price * ins_rate)) * years
     
     t_unit = 35000 if is_kei else 80000
     tire_usage = (int(dist * years * 0.7 / 30000) * t_unit)
     winter_cost = ((t_unit + 40000 + 8000 * years) if is_winter else 0)
-    tire_total = tire_usage + winter_cost
-    
-    return dep + fuel + tax + shaken + ins_total + tire_total
+    return dep + fuel + tax + shaken + ins_total + (tire_usage + winter_cost)
 
 # --- 2. 車両比較 ---
 st.header("🚘 比較する車両の入力")
@@ -102,5 +87,17 @@ if diff > 0:
 else:
     st.success(f"普通車の方が **{int(abs(diff)/10000):,}万円** お得です！")
 
-with st.expander("💡 賢者の判定アドバイス"):
-    st.write("保有期間や走行距離に応じたリアルな維持費の差を表示しています。")
+# --- 4. 計算根拠の説明（追加部分） ---
+with st.expander("🧮 賢者の計算根拠・前提条件"):
+    st.markdown(f"""
+    本シミュレーターは以下の条件で算出しています。
+    
+    * **実質負担額**: （購入価格 ー {years}年後の予想売却価格）をベースに計算。
+    * **燃料代**: 走行距離 ÷ 実用燃費 × ガソリン単価 で算出。
+    * **自動車税**: 軽自動車一律 10,800円/年、普通車（1.5L以下想定） 30,500円/年。
+    * **車検代**: 2年に1回実施と仮定（軽: 6万円、普通: 10万円 / 回）。
+    * **任意保険**: プランに応じた料率（0%〜2.5%）を購入価格に乗じ、基本料を加算。
+    * **タイヤ代**: 走行3万kmごとの交換費用と、スタッドレス購入・交換工賃を含む。
+    
+    ※実際の維持費は使用環境や車種により異なります。目安としてご活用ください。
+    """)
