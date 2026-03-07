@@ -32,19 +32,25 @@ with st.container(border=True):
         ], index=1)
 
     st.divider()
-    col_tire1, col_tire2 = st.columns(2)
-    with col_tire1:
+    col_opt1, col_opt2 = st.columns(2)
+    with col_opt1:
         is_winter = st.toggle("スタッドレスタイヤを使用", value=True)
-    with col_tire2:
+        # 【新機能】売却価格を計算に含めるかどうかのトグル
+        is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True)
+    with col_opt2:
         w_months = st.selectbox("冬タイヤ装着期間 (ヶ月)", options=[1, 2, 3, 4, 5, 6], index=2) if is_winter else 0
 
 # --- 計算ロジック ---
-def get_resale(p, y, is_new):
-    r = {3:0.6, 5:0.4, 7:0.2, 10:0.05} if is_new else {3:0.45, 5:0.25, 7:0.15, 10:0.03}
-    return p * r.get(y, 0.1)
+def get_resale_price(p, y, is_new):
+    # 保有期間に応じた残価率の簡易テーブル
+    r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 4:0.35, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
+    return int(p * r.get(y, 0.05))
 
 def calc_all(price, mpg, is_kei, is_new):
-    dep = price - get_resale(price, years, is_new)
+    # 売却価格を考慮するか判定
+    resale_val = get_resale_price(price, years, is_new)
+    actual_dep = (price - resale_val) if is_resale_included else price
+    
     fuel = (dist * years / mpg) * gas
     tax = (10800 if is_kei else 30500) * years
     shaken = (years // 2) * (60000 if is_kei else 100000)
@@ -56,23 +62,31 @@ def calc_all(price, mpg, is_kei, is_new):
     t_unit = 35000 if is_kei else 80000
     tire_usage = (int(dist * years * 0.7 / 30000) * t_unit)
     winter_cost = ((t_unit + 40000 + 8000 * years) if is_winter else 0)
-    return dep + fuel + tax + shaken + ins_total + (tire_usage + winter_cost)
+    
+    total = actual_dep + fuel + tax + shaken + ins_total + (tire_usage + winter_cost)
+    return total, resale_val
 
 # --- 2. 車両比較 ---
 st.header("🚘 比較する車両の入力")
 col_v1, col_v2 = st.columns(2)
+
 with col_v1:
     with st.container(border=True):
         st.subheader("【A】軽自動車")
         k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, key="k_p")
         k_m = st.number_input("実用燃費 (km/L)", value=20.0, step=1.0, key="k_m")
-        k_total = calc_all(k_p, k_m, True, True)
+        k_total, k_resale = calc_all(k_p, k_m, True, True)
+        if is_resale_included:
+            st.info(f"💡 {years}年後の予想売却価格: **{int(k_resale/10000):,}万円**")
+
 with col_v2:
     with st.container(border=True):
         st.subheader("【B】普通車")
         s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, key="s_p")
         s_m = st.number_input("実用燃費 (km/L)", value=15.0, step=1.0, key="s_m")
-        s_total = calc_all(s_p, s_m, False, False)
+        s_total, s_resale = calc_all(s_p, s_m, False, False)
+        if is_resale_included:
+            st.info(f"💡 {years}年後の予想売却価格: **{int(s_resale/10000):,}万円**")
 
 # --- 3. 結果発表 ---
 st.divider()
@@ -87,17 +101,16 @@ if diff > 0:
 else:
     st.success(f"普通車の方が **{int(abs(diff)/10000):,}万円** お得です！")
 
-# --- 4. 計算根拠の説明（追加部分） ---
+# --- 4. 計算根拠 ---
 with st.expander("🧮 賢者の計算根拠・前提条件"):
+    resale_text = f"（購入価格 ー {years}年後の予想売却価格）" if is_resale_included else "（購入価格のみ ※売却なし）"
     st.markdown(f"""
     本シミュレーターは以下の条件で算出しています。
     
-    * **実質負担額**: （購入価格 ー {years}年後の予想売却価格）をベースに計算。
+    * **車両実質負担額**: {resale_text} をベースに計算。
     * **燃料代**: 走行距離 ÷ 実用燃費 × ガソリン単価 で算出。
-    * **自動車税**: 軽自動車一律 10,800円/年、普通車（1.5L以下想定） 30,500円/年。
-    * **車検代**: 2年に1回実施と仮定（軽: 6万円、普通: 10万円 / 回）。
-    * **任意保険**: プランに応じた料率（0%〜2.5%）を購入価格に乗じ、基本料を加算。
-    * **タイヤ代**: 走行3万kmごとの交換費用と、スタッドレス購入・交換工賃を含む。
-    
-    ※実際の維持費は使用環境や車種により異なります。目安としてご活用ください。
+    * **自動車税**: 軽自動車 10,800円/年、普通車 30,500円/年。
+    * **車検代**: 2年に1回（軽: 6万、普通: 10万）と仮定。
+    * **任意保険**: プランに応じた料率を購入価格に乗じ、基本料を加算。
+    * **タイヤ代**: 走行3万kmごとの交換費用と、スタッドレス維持費を含む。
     """)
