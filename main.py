@@ -7,7 +7,9 @@ st.set_page_config(page_title="賢者の車選びシミュレーター", page_ic
 st.markdown("""
     <style>
     .block-container { max-width: 800px; padding-top: 2rem; }
-    .stMetric { background-color: #f8f9fa; padding: 10px; border-radius: 10px; border: 1px solid #e9ecef; }
+    .stMetric { background-color: #f8f9fa; padding: 15px; border-radius: 10px; border: 1px solid #e9ecef; }
+    /* 数字を大きく見せるための調整 */
+    [data-testid="stMetricValue"] { font-size: 2rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -21,7 +23,7 @@ with st.container(border=True):
     
     with col_base1:
         years = st.selectbox("保有予定期間 (年)", options=[3, 4, 5, 6, 7, 8, 9, 10], index=2)
-        # 【修正】format="%d" を指定してカンマ表示に対応
+        # 確定時にカンマが表示される設定
         dist = st.number_input("年間走行距離 (km)", value=10000, step=1000, format="%d")
         
     with col_base2:
@@ -60,7 +62,8 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included):
     tire_usage = (int(dist * years * 0.7 / 30000) * t_unit)
     winter_cost = ((t_unit + 40000 + 8000 * years) if is_winter else 0)
     
-    total = actual_dep + fuel + tax + shaken + ins_total + (tire_usage + winter_cost)
+    # 小数点以下を切り捨てて整数にする
+    total = int(actual_dep + fuel + tax + shaken + ins_total + (tire_usage + winter_cost))
     return total, resale_val
 
 # --- 2. 車両比較 ---
@@ -69,10 +72,6 @@ st.header("🚘 比較する車両の入力")
 resale_help = """
 **予想売却価格（残価）の計算根拠:**
 保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。
-- 3年: 新車 60% / 中古 45%
-- 5年: 新車 40% / 中古 25%
-- 7年: 新車 20% / 中古 15%
-- 10年: 新車 5% / 中古 3%
 """
 is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True, help=resale_help)
 
@@ -81,7 +80,6 @@ col_v1, col_v2 = st.columns(2)
 with col_v1:
     with st.container(border=True):
         st.subheader("【A】軽自動車")
-        # 【修正】format="%d" を指定
         k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, format="%d", key="k_p")
         k_m = st.number_input("実用燃費 (km/L)", value=20.0, step=1.0, key="k_m")
         k_total, k_resale = calc_all(k_p, k_m, True, True, is_resale_included)
@@ -91,7 +89,6 @@ with col_v1:
 with col_v2:
     with st.container(border=True):
         st.subheader("【B】普通車")
-        # 【修正】format="%d" を指定
         s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, format="%d", key="s_p")
         s_m = st.number_input("実用燃費 (km/L)", value=15.0, step=1.0, key="s_m")
         s_total, s_resale = calc_all(s_p, s_m, False, False, is_resale_included)
@@ -103,15 +100,15 @@ st.divider()
 st.header("📊 算出結果（トータルコスト）")
 res_c1, res_c2 = st.columns(2)
 
-# 【修正】万円単位だけでなく、詳細な金額もカンマ区切りで表示
-res_c1.metric("軽自動車 合計", f"{int(k_total/10000):,}万円", f"{k_total:,}円", delta_color="off")
-res_c2.metric("普通車 合計", f"{int(s_total/10000):,}万円", f"{s_total:,}円", delta_color="off")
+# 【修正】メインの数字を1円単位のカンマ区切りに変更
+res_c1.metric("軽自動車 合計", f"{k_total:,}円")
+res_c2.metric("普通車 合計", f"{s_total:,}円")
 
 diff = s_total - k_total
 if diff > 0:
-    st.error(f"普通車の方が **{int(diff/10000):,}万円 ({diff:,}円)** 高くなります。")
+    st.error(f"普通車の方が **{diff:,}円** 高くなります。")
 else:
-    st.success(f"普通車の方が **{int(abs(diff)/10000):,}万円 ({abs(diff):,}円)** お得です！")
+    st.success(f"普通車の方が **{abs(diff):,}円** お得です！")
 
 # --- 4. 計算根拠 ---
 with st.expander("🧮 賢者の計算根拠・前提条件"):
