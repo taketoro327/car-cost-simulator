@@ -1,9 +1,9 @@
 import streamlit as st
 
-# ページ設定：中央寄せにするため layout="wide" は使いません
+# ページ設定：中央寄せ
 st.set_page_config(page_title="賢者の車選びシミュレーター", page_icon="🚗")
 
-# カスタムCSS：画面中央に寄せて、見た目を整える
+# カスタムCSS：デザイン微調整
 st.markdown("""
     <style>
     .block-container { max-width: 800px; padding-top: 2rem; }
@@ -14,19 +14,27 @@ st.markdown("""
 st.title("🚗 賢者の車選びシミュレーター")
 st.write("「軽自動車」と「普通車」の維持費をリアルに比較。")
 
-# --- 1. 基本条件 ---
+# --- 1. 基本条件（ここにすべて統合しました） ---
 with st.container(border=True):
     st.subheader("🗓️ シミュレーションの基本条件")
-    years = st.slider("保有予定期間 (年)", 3, 10, 5)
-    dist = st.number_input("年間走行距離 (km)", value=10000, step=1000)
-    is_winter = st.toggle("スタッドレスタイヤを使用", value=True)
-    w_months = st.slider("冬タイヤ装着期間 (ヶ月)", 1, 6, 3) if is_winter else 0
+    
+    col_base1, col_base2 = st.columns(2)
+    with col_base1:
+        years = st.slider("保有予定期間 (年)", 3, 10, 5)
+        dist = st.number_input("年間走行距離 (km)", value=10000, step=1000)
+    with col_base2:
+        gas = st.slider("ガソリン単価 (円/L)", 150, 200, 175)
+        ins_type = st.selectbox("保険プラン", ["基本（対人対物）", "安心（車両保険付）", "万全（一般車両付）"], index=1)
 
-# サイドバー
-gas = st.sidebar.slider("ガソリン単価 (円/L)", 150, 200, 175)
-ins_type = st.sidebar.radio("保険プラン", ["基本", "安心", "万全"], index=1)
+    st.divider()
+    
+    col_tire1, col_tire2 = st.columns(2)
+    with col_tire1:
+        is_winter = st.toggle("スタッドレスタイヤを使用", value=True)
+    with col_tire2:
+        w_months = st.slider("冬タイヤ装着期間 (ヶ月)", 1, 6, 3) if is_winter else 0
 
-# --- 計算ロジック ---
+# --- 計算ロジック（変更なし） ---
 def get_resale(p, y, is_new):
     r = {3:0.6, 5:0.4, 7:0.2, 10:0.05} if is_new else {3:0.45, 5:0.25, 7:0.15, 10:0.03}
     return p * r.get(y, 0.1)
@@ -36,35 +44,49 @@ def calc_all(price, mpg, is_kei, is_new):
     fuel = (dist * years / mpg) * gas
     tax = (10800 if is_kei else 30500) * years
     shaken = (years // 2) * (60000 if is_kei else 100000)
-    ins = (35000 if is_kei else 45000) * years + (price * 0.02 * years if ins_type != "基本" else 0)
-    # タイヤ代
+    # 保険料簡易計算
+    base_ins = (35000 if is_kei else 45000)
+    ins_total = base_ins * years + (price * 0.02 * years if "基本" not in ins_type else 0)
+    # タイヤ代（スタッドレス込）
     t_unit = 35000 if is_kei else 80000
     tire = (int(dist*years*0.7/30000)*t_unit) + ((t_unit+40000+8000*years) if is_winter else 0)
-    return dep + fuel + tax + shaken + ins + tire
+    return dep + fuel + tax + shaken + ins_total + tire
 
-# --- 2. 車両入力 ---
+# --- 2. 車両比較 ---
 st.header("🚘 比較する車両の入力")
-with st.container(border=True):
-    st.subheader("【A】軽自動車")
-    k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, key="k_p")
-    k_m = st.number_input("実用燃費 (km/L)", value=20.0, step=1.0, key="k_m")
-    k_total = calc_all(k_p, k_m, True, True)
+col_v1, col_v2 = st.columns(2)
 
-with st.container(border=True):
-    st.subheader("【B】普通車（中古）")
-    s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, key="s_p")
-    s_m = st.number_input("実用燃費 (km/L)", value=15.0, step=1.0, key="s_m")
-    s_total = calc_all(s_p, s_m, False, False)
+with col_v1:
+    with st.container(border=True):
+        st.subheader("【A】軽自動車")
+        k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, key="k_p")
+        k_m = st.number_input("実用燃費 (km/L)", value=20.0, step=1.0, key="k_m")
+        k_total = calc_all(k_p, k_m, True, True)
+
+with col_v2:
+    with st.container(border=True):
+        st.subheader("【B】普通車")
+        s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, key="s_p")
+        s_m = st.number_input("実用燃費 (km/L)", value=15.0, step=1.0, key="s_m")
+        s_total = calc_all(s_p, s_m, False, False)
 
 # --- 3. 結果発表 ---
 st.divider()
-st.header("📊 算出結果")
-c1, c2 = st.columns(2)
-c1.metric("軽自動車 合計", f"{int(k_total/10000):,}万円")
-c2.metric("普通車 合計", f"{int(s_total/10000):,}万円")
+st.header("📊 算出結果（トータルコスト）")
+res_c1, res_c2 = st.columns(2)
+res_c1.metric("軽自動車 合計", f"{int(k_total/10000):,}万円")
+res_c2.metric("普通車 合計", f"{int(s_total/10000):,}万円")
 
 diff = s_total - k_total
 if diff > 0:
     st.error(f"普通車の方が **{int(diff/10000):,}万円** 高くなります。")
 else:
     st.success(f"普通車の方が **{int(abs(diff)/10000):,}万円** お得です！")
+
+with st.expander("💡 賢者の判定アドバイス"):
+    if diff > 1000000:
+        st.write("圧倒的な差です。経済性を重視するなら軽自動車一択です。")
+    elif diff > 0:
+        st.write(f"{int(diff/10000):,}万円の差を、普通車の安全性や快適性への投資と考えれば納得できる範囲かもしれません。")
+    else:
+        st.write("普通車の方が経済的という驚きの結果です！迷わず普通車を選びましょう。")
