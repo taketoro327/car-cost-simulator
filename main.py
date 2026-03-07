@@ -9,6 +9,8 @@ st.markdown("""
     .block-container { max-width: 800px; padding-top: 2rem; }
     .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; }
     [data-testid="stMetricValue"] { font-size: 2rem !important; }
+    /* 内訳の文字サイズを少し調整 */
+    .streamlit-expanderContent { font-size: 0.9rem; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -44,6 +46,7 @@ def get_resale_price(p, y, is_new):
     r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 4:0.35, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
     return int(p * r.get(y, 0.05))
 
+# 【修正】合計と残価だけでなく、各項目の細かい内訳も返すように変更
 def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, change_fee):
     resale_val = get_resale_price(price, years, is_new)
     actual_dep = (price - resale_val) if is_resale_included else price
@@ -53,14 +56,17 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, ch
     shaken = (years // 2) * (60000 if is_kei else 100000)
     
     base_ins = (35000 if is_kei else 45000)
-    ins_rate = 0.025 if "万全プラン" in ins_type else (0.015 if "安心プラン" in ins_type else 0.0)
+    ins_rate = 0.025 if "万全" in ins_type else (0.015 if "安心" in ins_type else 0.0)
     ins_total = (base_ins + (price * ins_rate)) * years
     
     tire_usage = (int(dist * years * 0.7 / 30000) * t_unit) 
     winter_cost = ((t_unit + w_price + (change_fee * years)) if is_winter else 0)
+    tire_total = tire_usage + winter_cost
     
-    total = int(actual_dep + fuel + tax + shaken + ins_total + (tire_usage + winter_cost))
-    return total, resale_val
+    total = int(actual_dep + fuel + tax + shaken + ins_total + tire_total)
+    
+    # 全てのデータを送り返す
+    return total, resale_val, int(actual_dep), int(fuel), int(tax), int(shaken), int(ins_total), int(tire_total)
 
 # --- 2. 車両比較 ---
 st.header("🚘 比較する車両の入力")
@@ -83,7 +89,6 @@ with col_v1:
     with st.container(border=True):
         st.subheader("【A】軽自動車")
         
-        # 【追加】状態・年式の選択
         k_age = st.selectbox("車両の状態・年式", ["新車（最新モデル）", "中古（3〜5年落ち程度）", "中古（10年落ち程度）"], key="k_age")
         if "新車" in k_age:
             k_is_new = True; k_default_p = 2000000; k_default_m = 22.0
@@ -93,14 +98,12 @@ with col_v1:
             k_is_new = False; k_default_p = 500000; k_default_m = 14.0
             
         k_p = st.number_input("購入価格 (円)", value=k_default_p, step=100000, format="%d", key="k_p")
-        
-        # 状態に合わせて燃費の初期値が連動
-        k_m = st.number_input("実用燃費 (km/L)", value=k_default_m, step=1.0, key="k_m", help="選択した年式に合わせた目安が入っています。手動で変更可能です。")
+        k_m = st.number_input("実用燃費 (km/L)", value=k_default_m, step=1.0, key="k_m")
         
         st.markdown("<div style='height: 70px;'>※タイヤは軽自動車標準サイズを想定</div>", unsafe_allow_html=True)
         
-        # k_is_new を判定に渡す
-        k_total, k_resale = calc_all(k_p, k_m, True, k_is_new, is_resale_included, 35000, 20000, 6000)
+        # 【修正】細かい内訳のデータも受け取る
+        k_total, k_resale, k_dep, k_fuel, k_tax, k_shaken, k_ins, k_tire = calc_all(k_p, k_m, True, k_is_new, is_resale_included, 35000, 20000, 6000)
         if is_resale_included:
             st.info(f"💡 {years}年後の予想売却価格: **{k_resale:,}円**")
 
@@ -108,7 +111,6 @@ with col_v2:
     with st.container(border=True):
         st.subheader("【B】普通車")
         
-        # 【追加】状態・年式の選択
         s_age = st.selectbox("車両の状態・年式", ["新車（最新モデル）", "中古（3〜5年落ち程度）", "中古（10年落ち程度）"], index=1, key="s_age")
         if "新車" in s_age:
             s_is_new = True; s_default_p = 3500000; s_default_m = 20.0
@@ -118,9 +120,7 @@ with col_v2:
             s_is_new = False; s_default_p = 800000; s_default_m = 10.0
             
         s_p = st.number_input("購入価格 (円)", value=s_default_p, step=100000, format="%d", key="s_p")
-        
-        # 状態に合わせて燃費の初期値が連動
-        s_m = st.number_input("実用燃費 (km/L)", value=s_default_m, step=1.0, key="s_m", help="選択した年式に合わせた目安が入っています。手動で変更可能です。")
+        s_m = st.number_input("実用燃費 (km/L)", value=s_default_m, step=1.0, key="s_m")
         
         s_tire_size = st.selectbox("タイヤサイズ", [
             "15インチ以下（コンパクトカー等）", 
@@ -135,8 +135,8 @@ with col_v2:
         else:
             s_t_unit = 120000; s_w_price = 80000; s_c_fee = 12000
             
-        # s_is_new を判定に渡す
-        s_total, s_resale = calc_all(s_p, s_m, False, s_is_new, is_resale_included, s_t_unit, s_w_price, s_c_fee)
+        # 【修正】細かい内訳のデータも受け取る
+        s_total, s_resale, s_dep, s_fuel, s_tax, s_shaken, s_ins, s_tire = calc_all(s_p, s_m, False, s_is_new, is_resale_included, s_t_unit, s_w_price, s_c_fee)
         if is_resale_included:
             st.info(f"💡 {years}年後の予想売却価格: **{s_resale:,}円**")
 
@@ -145,8 +145,26 @@ st.divider()
 st.header("📊 算出結果（トータルコスト）")
 res_c1, res_c2 = st.columns(2)
 
-res_c1.metric("軽自動車 合計", f"{k_total:,}円")
-res_c2.metric("普通車 合計", f"{s_total:,}円")
+# 【追加】結果表示のすぐ下に「内訳を見る」トグル（エクスパンダー）を設置
+with res_c1:
+    st.metric("軽自動車 合計", f"{k_total:,}円")
+    with st.expander("🔍 内訳を見る"):
+        st.write(f"- 車両実質負担額: {k_dep:,}円")
+        st.write(f"- ガソリン代: {k_fuel:,}円")
+        st.write(f"- 自動車税: {k_tax:,}円")
+        st.write(f"- 車検代: {k_shaken:,}円")
+        st.write(f"- 任意保険: {k_ins:,}円")
+        st.write(f"- タイヤ関連費: {k_tire:,}円")
+
+with res_c2:
+    st.metric("普通車 合計", f"{s_total:,}円")
+    with st.expander("🔍 内訳を見る"):
+        st.write(f"- 車両実質負担額: {s_dep:,}円")
+        st.write(f"- ガソリン代: {s_fuel:,}円")
+        st.write(f"- 自動車税: {s_tax:,}円")
+        st.write(f"- 車検代: {s_shaken:,}円")
+        st.write(f"- 任意保険: {s_ins:,}円")
+        st.write(f"- タイヤ関連費: {s_tire:,}円")
 
 diff = s_total - k_total
 if diff > 0:
