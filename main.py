@@ -3,11 +3,12 @@ import streamlit as st
 # ページ設定
 st.set_page_config(page_title="賢者の車選びシミュレーター", page_icon="🚗")
 
-# デザイン設定
+# デザイン設定（ダークモード・ライトモード両対応に修正）
 st.markdown("""
     <style>
     .block-container { max-width: 800px; padding-top: 2rem; }
-    .stMetric { background-color: #f8f9fa; padding: 15px; border-radius: 10px; border: 1px solid #e9ecef; }
+    /* 背景色を環境に合わせて馴染む「半透明のグレー」に変更しました */
+    .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; }
     [data-testid="stMetricValue"] { font-size: 2rem !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -44,7 +45,6 @@ def get_resale_price(p, y, is_new):
     r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 4:0.35, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
     return int(p * r.get(y, 0.05))
 
-# 【修正】タイヤ単価に加え、ホイール代と毎年の履き替え工賃を引数で受け取る
 def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, change_fee):
     resale_val = get_resale_price(price, years, is_new)
     actual_dep = (price - resale_val) if is_resale_included else price
@@ -57,9 +57,7 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, ch
     ins_rate = 0.025 if "万全プラン" in ins_type else (0.015 if "安心プラン" in ins_type else 0.0)
     ins_total = (base_ins + (price * ins_rate)) * years
     
-    # 【修正】タイヤ代・工賃の精密な計算
-    tire_usage = (int(dist * years * 0.7 / 30000) * t_unit) # 夏タイヤの摩耗交換
-    # 冬タイヤ導入費（タイヤ＋ホイール） ＋ 毎年の履き替え工賃（春・冬）
+    tire_usage = (int(dist * years * 0.7 / 30000) * t_unit) 
     winter_cost = ((t_unit + w_price + (change_fee * years)) if is_winter else 0)
     
     total = int(actual_dep + fuel + tax + shaken + ins_total + (tire_usage + winter_cost))
@@ -90,7 +88,6 @@ with col_v1:
         
         st.markdown("<div style='height: 70px;'>※タイヤは軽自動車標準サイズを想定</div>", unsafe_allow_html=True)
         
-        # 軽自動車のタイヤ費用設定（単価3.5万, ホイール2万, 年間工賃6,000円）
         k_total, k_resale = calc_all(k_p, k_m, True, True, is_resale_included, 35000, 20000, 6000)
         if is_resale_included:
             st.info(f"💡 {years}年後の予想売却価格: **{k_resale:,}円**")
@@ -107,7 +104,6 @@ with col_v2:
             "18インチ以上（SUV・高級車等）"
         ], index=1)
         
-        # 【追加】サイズごとのタイヤ単価・ホイール代・年間履き替え工賃の設定
         if "15" in s_tire_size:
             s_t_unit = 40000; s_w_price = 40000; s_c_fee = 8000
         elif "16" in s_tire_size:
