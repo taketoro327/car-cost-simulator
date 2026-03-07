@@ -21,7 +21,8 @@ with st.container(border=True):
     
     with col_base1:
         years = st.selectbox("保有予定期間 (年)", options=[3, 4, 5, 6, 7, 8, 9, 10], index=2)
-        dist = st.number_input("年間走行距離 (km)", value=10000, step=1000)
+        # 【修正】format="%d" を指定してカンマ表示に対応
+        dist = st.number_input("年間走行距離 (km)", value=10000, step=1000, format="%d")
         
     with col_base2:
         gas = st.selectbox("ガソリン単価 (円/L)", options=list(range(150, 201, 5)), index=5)
@@ -40,7 +41,6 @@ with st.container(border=True):
 
 # --- 計算ロジック ---
 def get_resale_price(p, y, is_new):
-    # 保有期間に応じた残価率の簡易テーブル（3年:60%、5年:40%、7年:20%など）
     r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 4:0.35, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
     return int(p * r.get(y, 0.05))
 
@@ -66,7 +66,6 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included):
 # --- 2. 車両比較 ---
 st.header("🚘 比較する車両の入力")
 
-# 【修正】トグルの横に計算根拠のヘルプテキストを追加
 resale_help = """
 **予想売却価格（残価）の計算根拠:**
 保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。
@@ -74,7 +73,6 @@ resale_help = """
 - 5年: 新車 40% / 中古 25%
 - 7年: 新車 20% / 中古 15%
 - 10年: 新車 5% / 中古 3%
-※走行距離や市場動向により実際は変動します。
 """
 is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True, help=resale_help)
 
@@ -83,33 +81,37 @@ col_v1, col_v2 = st.columns(2)
 with col_v1:
     with st.container(border=True):
         st.subheader("【A】軽自動車")
-        k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, key="k_p")
+        # 【修正】format="%d" を指定
+        k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, format="%d", key="k_p")
         k_m = st.number_input("実用燃費 (km/L)", value=20.0, step=1.0, key="k_m")
         k_total, k_resale = calc_all(k_p, k_m, True, True, is_resale_included)
         if is_resale_included:
-            st.info(f"💡 {years}年後の予想売却価格: **{int(k_resale/10000):,}万円**")
+            st.info(f"💡 {years}年後の予想売却価格: **{k_resale:,}円**")
 
 with col_v2:
     with st.container(border=True):
         st.subheader("【B】普通車")
-        s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, key="s_p")
+        # 【修正】format="%d" を指定
+        s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, format="%d", key="s_p")
         s_m = st.number_input("実用燃費 (km/L)", value=15.0, step=1.0, key="s_m")
         s_total, s_resale = calc_all(s_p, s_m, False, False, is_resale_included)
         if is_resale_included:
-            st.info(f"💡 {years}年後の予想売却価格: **{int(s_resale/10000):,}万円**")
+            st.info(f"💡 {years}年後の予想売却価格: **{s_resale:,}円**")
 
 # --- 3. 結果発表 ---
 st.divider()
 st.header("📊 算出結果（トータルコスト）")
 res_c1, res_c2 = st.columns(2)
-res_c1.metric("軽自動車 合計", f"{int(k_total/10000):,}万円")
-res_c2.metric("普通車 合計", f"{int(s_total/10000):,}万円")
+
+# 【修正】万円単位だけでなく、詳細な金額もカンマ区切りで表示
+res_c1.metric("軽自動車 合計", f"{int(k_total/10000):,}万円", f"{k_total:,}円", delta_color="off")
+res_c2.metric("普通車 合計", f"{int(s_total/10000):,}万円", f"{s_total:,}円", delta_color="off")
 
 diff = s_total - k_total
 if diff > 0:
-    st.error(f"普通車の方が **{int(diff/10000):,}万円** 高くなります。")
+    st.error(f"普通車の方が **{int(diff/10000):,}万円 ({diff:,}円)** 高くなります。")
 else:
-    st.success(f"普通車の方が **{int(abs(diff)/10000):,}万円** お得です！")
+    st.success(f"普通車の方が **{int(abs(diff)/10000):,}万円 ({abs(diff):,}円)** お得です！")
 
 # --- 4. 計算根拠 ---
 with st.expander("🧮 賢者の計算根拠・前提条件"):
