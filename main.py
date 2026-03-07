@@ -22,7 +22,9 @@ with st.container(border=True):
     
     with col_base1:
         years = st.selectbox("保有予定期間 (年)", options=[3, 4, 5, 6, 7, 8, 9, 10], index=2)
-        dist = st.number_input("年間走行距離 (km)", value=10000, step=1000, format="%d")
+        dist = st.number_input("年間走行距離 (km)", value=10000, step=1000)
+        # 【修正】入力欄の下にカンマ付きで表示
+        st.caption(f"📝 入力値: **{dist:,} km**")
         
     with col_base2:
         gas = st.selectbox("ガソリン単価 (円/L)", options=list(range(150, 201, 5)), index=5)
@@ -41,7 +43,6 @@ with st.container(border=True):
 
 # --- 計算ロジック ---
 def get_resale_price(p, y, is_new):
-    # 保有期間に応じた残価率のテーブル
     r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 4:0.35, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
     return int(p * r.get(y, 0.05))
 
@@ -67,7 +68,6 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included):
 # --- 2. 車両比較 ---
 st.header("🚘 比較する車両の入力")
 
-# 【修正】ヘルプテキストを現在のロジックに完全一致させました
 resale_help = """
 **予想売却価格（残価）の計算根拠:**
 保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。
@@ -87,7 +87,10 @@ col_v1, col_v2 = st.columns(2)
 with col_v1:
     with st.container(border=True):
         st.subheader("【A】軽自動車")
-        k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, format="%d", key="k_p")
+        k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, key="k_p")
+        # 【修正】入力欄の下にカンマ付きで表示
+        st.caption(f"📝 入力値: **{k_p:,} 円**")
+        
         k_m = st.number_input("実用燃費 (km/L)", value=20.0, step=1.0, key="k_m")
         k_total, k_resale = calc_all(k_p, k_m, True, True, is_resale_included)
         if is_resale_included:
@@ -96,7 +99,10 @@ with col_v1:
 with col_v2:
     with st.container(border=True):
         st.subheader("【B】普通車")
-        s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, format="%d", key="s_p")
+        s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, key="s_p")
+        # 【修正】入力欄の下にカンマ付きで表示
+        st.caption(f"📝 入力値: **{s_p:,} 円**")
+        
         s_m = st.number_input("実用燃費 (km/L)", value=15.0, step=1.0, key="s_m")
         s_total, s_resale = calc_all(s_p, s_m, False, False, is_resale_included)
         if is_resale_included:
