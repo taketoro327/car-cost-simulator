@@ -8,7 +8,6 @@ st.markdown("""
     <style>
     .block-container { max-width: 800px; padding-top: 2rem; }
     .stMetric { background-color: #f8f9fa; padding: 15px; border-radius: 10px; border: 1px solid #e9ecef; }
-    /* 数字を大きく見せるための調整 */
     [data-testid="stMetricValue"] { font-size: 2rem !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -23,7 +22,6 @@ with st.container(border=True):
     
     with col_base1:
         years = st.selectbox("保有予定期間 (年)", options=[3, 4, 5, 6, 7, 8, 9, 10], index=2)
-        # 確定時にカンマが表示される設定
         dist = st.number_input("年間走行距離 (km)", value=10000, step=1000, format="%d")
         
     with col_base2:
@@ -43,6 +41,7 @@ with st.container(border=True):
 
 # --- 計算ロジック ---
 def get_resale_price(p, y, is_new):
+    # 保有期間に応じた残価率のテーブル
     r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 4:0.35, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
     return int(p * r.get(y, 0.05))
 
@@ -62,16 +61,24 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included):
     tire_usage = (int(dist * years * 0.7 / 30000) * t_unit)
     winter_cost = ((t_unit + 40000 + 8000 * years) if is_winter else 0)
     
-    # 小数点以下を切り捨てて整数にする
     total = int(actual_dep + fuel + tax + shaken + ins_total + (tire_usage + winter_cost))
     return total, resale_val
 
 # --- 2. 車両比較 ---
 st.header("🚘 比較する車両の入力")
 
+# 【修正】ヘルプテキストを現在のロジックに完全一致させました
 resale_help = """
 **予想売却価格（残価）の計算根拠:**
 保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。
+
+**【残価率の目安（新車 / 中古）】**
+- **3年**: 60% / 45%
+- **5年**: 40% / 25%
+- **7年**: 20% / 15%
+- **10年**: 5% / 3%
+
+※走行距離や市場ニーズにより変動しますが、本ツールでは標準的な下取り相場を採用しています。
 """
 is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True, help=resale_help)
 
@@ -100,7 +107,6 @@ st.divider()
 st.header("📊 算出結果（トータルコスト）")
 res_c1, res_c2 = st.columns(2)
 
-# 【修正】メインの数字を1円単位のカンマ区切りに変更
 res_c1.metric("軽自動車 合計", f"{k_total:,}円")
 res_c2.metric("普通車 合計", f"{s_total:,}円")
 
