@@ -17,11 +17,11 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🚗 賢者の車選びシミュレーター")
-st.write("「軽自動車」と「普通車」の維持費をリアルに比較。")
+# 【変更】購入費と維持費に変更
+st.write("「軽自動車」と「普通車」の購入費と維持費をリアルに比較。")
 
 # --- 1. 基本条件 ---
 with st.container(border=True):
-    # フォントサイズを1.2remに固定し、1行に収める
     st.markdown("<h3 style='font-size: 1.2rem; margin-bottom: 0.5rem;'>🗓️ シミュレーションの基本条件</h3>", unsafe_allow_html=True)
     
     col_base1, col_base2 = st.columns(2)
@@ -35,16 +35,15 @@ with st.container(border=True):
         
     st.divider()
     
-    # 【修正】共通条件はタイトルとhelpにまとめ、選択肢を短縮してラジオボタン化
+    # 【修正】保険プランの箇所の help（ツールチップ）のみを削除
     ins_type = st.radio(
         "保険プラン（※全プラン対人対物無制限）", 
         options=[
             "基本プラン（車両保険なし）", 
-            "安心プラン（＋車両エコノミー）", 
-            "万全プラン（＋車両一般）"
+            "安心プラン（＋車両保険エコノミー）", 
+            "万全プラン（＋車両保険一般）"
         ], 
-        index=1,
-        help="【全プラン共通】対人・対物賠償は無制限です。\n\n【車両補償の違い】\n・基本プラン：車両補償なし\n・安心プラン：車対車＋限定危険（自損や当て逃げは対象外）\n・万全プラン：一般条件（自損や当て逃げもカバー）"
+        index=1
     )
 
     st.divider()
@@ -68,7 +67,6 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, ch
     shaken = (years // 2) * (60000 if is_kei else 100000)
     
     base_ins = (35000 if is_kei else 45000)
-    # 文字列を短縮しても「万全」「安心」のキーワードが含まれているのでロジックは正常に機能します
     ins_rate = 0.025 if "万全" in ins_type else (0.015 if "安心" in ins_type else 0.0)
     ins_total = (base_ins + (price * ins_rate)) * years
     
@@ -81,18 +79,12 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, ch
     return total, resale_val, int(actual_dep), int(fuel), int(tax), int(shaken), int(ins_total), int(tire_total)
 
 # --- 2. 車両比較 ---
-# フォントサイズを1.2remに固定し、1行に収める
 st.markdown("<h3 style='font-size: 1.2rem; margin-bottom: 0.5rem;'>🚘 比較する車両の入力</h3>", unsafe_allow_html=True)
 
+# 【復元】売却価格のツールチップは戻しました
 resale_help = """
 **予想売却価格（残価）の計算根拠:**
 保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。
-
-**【残価率の目安（新車 / 中古）】**
-- **3年**: 60% / 45%
-- **5年**: 40% / 25%
-- **7年**: 20% / 15%
-- **10年**: 5% / 3%
 """
 is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True, help=resale_help)
 
@@ -153,7 +145,6 @@ with col_v2:
 
 # --- 3. 結果発表 ---
 st.divider()
-# フォントサイズを1.2remに固定し、1行に収める
 st.markdown("<h3 style='font-size: 1.2rem; margin-bottom: 0.5rem;'>📊 算出結果（トータルコスト）</h3>", unsafe_allow_html=True)
 
 res_c1, res_c2 = st.columns(2)
