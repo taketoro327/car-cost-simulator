@@ -40,7 +40,8 @@ with st.container(border=True):
 
 # --- 計算ロジック ---
 def get_resale_price(p, y, is_new):
-    r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
+    # 保有期間に応じた残価率の簡易テーブル（3年:60%、5年:40%、7年:20%など）
+    r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 4:0.35, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
     return int(p * r.get(y, 0.05))
 
 def calc_all(price, mpg, is_kei, is_new, is_resale_included):
@@ -65,8 +66,17 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included):
 # --- 2. 車両比較 ---
 st.header("🚘 比較する車両の入力")
 
-# 【修正】トグルボタンをここ（車両入力の冒頭）に移動
-is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True)
+# 【修正】トグルの横に計算根拠のヘルプテキストを追加
+resale_help = """
+**予想売却価格（残価）の計算根拠:**
+保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。
+- 3年: 新車 60% / 中古 45%
+- 5年: 新車 40% / 中古 25%
+- 7年: 新車 20% / 中古 15%
+- 10年: 新車 5% / 中古 3%
+※走行距離や市場動向により実際は変動します。
+"""
+is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True, help=resale_help)
 
 col_v1, col_v2 = st.columns(2)
 
