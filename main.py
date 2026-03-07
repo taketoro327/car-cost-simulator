@@ -22,9 +22,7 @@ with st.container(border=True):
     
     with col_base1:
         years = st.selectbox("保有予定期間 (年)", options=[3, 4, 5, 6, 7, 8, 9, 10], index=2)
-        dist = st.number_input("年間走行距離 (km)", value=10000, step=1000)
-        # 【修正】入力欄の下にカンマ付きで表示
-        st.caption(f"📝 入力値: **{dist:,} km**")
+        dist = st.number_input("年間走行距離 (km)", value=10000, step=1000, format="%d")
         
     with col_base2:
         gas = st.selectbox("ガソリン単価 (円/L)", options=list(range(150, 201, 5)), index=5)
@@ -46,7 +44,8 @@ def get_resale_price(p, y, is_new):
     r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 4:0.35, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
     return int(p * r.get(y, 0.05))
 
-def calc_all(price, mpg, is_kei, is_new, is_resale_included):
+# 【修正】タイヤ単価に加え、ホイール代と毎年の履き替え工賃を引数で受け取る
+def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, change_fee):
     resale_val = get_resale_price(price, years, is_new)
     actual_dep = (price - resale_val) if is_resale_included else price
     
@@ -58,9 +57,10 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included):
     ins_rate = 0.025 if "万全プラン" in ins_type else (0.015 if "安心プラン" in ins_type else 0.0)
     ins_total = (base_ins + (price * ins_rate)) * years
     
-    t_unit = 35000 if is_kei else 80000
-    tire_usage = (int(dist * years * 0.7 / 30000) * t_unit)
-    winter_cost = ((t_unit + 40000 + 8000 * years) if is_winter else 0)
+    # 【修正】タイヤ代・工賃の精密な計算
+    tire_usage = (int(dist * years * 0.7 / 30000) * t_unit) # 夏タイヤの摩耗交換
+    # 冬タイヤ導入費（タイヤ＋ホイール） ＋ 毎年の履き替え工賃（春・冬）
+    winter_cost = ((t_unit + w_price + (change_fee * years)) if is_winter else 0)
     
     total = int(actual_dep + fuel + tax + shaken + ins_total + (tire_usage + winter_cost))
     return total, resale_val
@@ -77,8 +77,6 @@ resale_help = """
 - **5年**: 40% / 25%
 - **7年**: 20% / 15%
 - **10年**: 5% / 3%
-
-※走行距離や市場ニーズにより変動しますが、本ツールでは標準的な下取り相場を採用しています。
 """
 is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True, help=resale_help)
 
@@ -87,24 +85,37 @@ col_v1, col_v2 = st.columns(2)
 with col_v1:
     with st.container(border=True):
         st.subheader("【A】軽自動車")
-        k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, key="k_p")
-        # 【修正】入力欄の下にカンマ付きで表示
-        st.caption(f"📝 入力値: **{k_p:,} 円**")
-        
+        k_p = st.number_input("購入価格 (円)", value=2000000, step=100000, format="%d", key="k_p")
         k_m = st.number_input("実用燃費 (km/L)", value=20.0, step=1.0, key="k_m")
-        k_total, k_resale = calc_all(k_p, k_m, True, True, is_resale_included)
+        
+        st.markdown("<div style='height: 70px;'>※タイヤは軽自動車標準サイズを想定</div>", unsafe_allow_html=True)
+        
+        # 軽自動車のタイヤ費用設定（単価3.5万, ホイール2万, 年間工賃6,000円）
+        k_total, k_resale = calc_all(k_p, k_m, True, True, is_resale_included, 35000, 20000, 6000)
         if is_resale_included:
             st.info(f"💡 {years}年後の予想売却価格: **{k_resale:,}円**")
 
 with col_v2:
     with st.container(border=True):
         st.subheader("【B】普通車")
-        s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, key="s_p")
-        # 【修正】入力欄の下にカンマ付きで表示
-        st.caption(f"📝 入力値: **{s_p:,} 円**")
-        
+        s_p = st.number_input("購入価格 (円)", value=3000000, step=100000, format="%d", key="s_p")
         s_m = st.number_input("実用燃費 (km/L)", value=15.0, step=1.0, key="s_m")
-        s_total, s_resale = calc_all(s_p, s_m, False, False, is_resale_included)
+        
+        s_tire_size = st.selectbox("タイヤサイズ", [
+            "15インチ以下（コンパクトカー等）", 
+            "16〜17インチ（ミドルクラス等）", 
+            "18インチ以上（SUV・高級車等）"
+        ], index=1)
+        
+        # 【追加】サイズごとのタイヤ単価・ホイール代・年間履き替え工賃の設定
+        if "15" in s_tire_size:
+            s_t_unit = 40000; s_w_price = 40000; s_c_fee = 8000
+        elif "16" in s_tire_size:
+            s_t_unit = 80000; s_w_price = 60000; s_c_fee = 10000
+        else:
+            s_t_unit = 120000; s_w_price = 80000; s_c_fee = 12000
+            
+        s_total, s_resale = calc_all(s_p, s_m, False, False, is_resale_included, s_t_unit, s_w_price, s_c_fee)
         if is_resale_included:
             st.info(f"💡 {years}年後の予想売却価格: **{s_resale:,}円**")
 
@@ -133,5 +144,9 @@ with st.expander("🧮 賢者の計算根拠・前提条件"):
     * **自動車税**: 軽自動車 10,800円/年、普通車 30,500円/年。
     * **車検代**: 2年に1回（軽: 6万、普通: 10万）と仮定。
     * **任意保険**: プランに応じた料率を購入価格に乗じ、基本料を加算。
-    * **タイヤ代**: 走行3万kmごとの交換費用と、スタッドレス維持費を含む。
+    * **タイヤ関連費（消耗＋スタッドレス導入費＋毎年の履き替え工賃）**:
+      * **軽自動車**: タイヤ約3.5万円 / ホイール約2万円 / 履き替え工賃 6,000円(年2回分)
+      * **普通 15インチ以下**: タイヤ約4万円 / ホイール約4万円 / 履き替え工賃 8,000円(年2回分)
+      * **普通 16〜17インチ**: タイヤ約8万円 / ホイール約6万円 / 履き替え工賃 10,000円(年2回分)
+      * **普通 18インチ以上**: タイヤ約12万円 / ホイール約8万円 / 履き替え工賃 12,000円(年2回分)
     """)
