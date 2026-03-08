@@ -9,7 +9,7 @@ st.markdown("""
     .block-container { max-width: 800px; padding-top: 2rem; }
     .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; }
     [data-testid="stMetricValue"] { font-size: 2rem !important; }
-    .streamlit-expanderContent { font-size: 0.9rem; }
+    .streamlit-expanderContent { font-size: 0.9rem; line-height: 1.6; }
     div[role="radiogroup"] label p { font-size: 0.85rem !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -17,9 +17,9 @@ st.markdown("""
 st.title("🚗 賢者の車選びシミュレーター")
 st.write("「軽自動車」と「普通車」の購入費・維持費・リセールを、物理法則と市場データに基づきリアルに比較。")
 
-# アクセスカウンター（短縮IDでエラー回避）
+# アクセスカウンター
 st.markdown(
-    "![Visitors](https://komarev.com/ghpvc/?username=kenja-car-v3&label=Visitors&color=red&style=flat-square)"
+    "![Visitors](https://komarev.com/ghpvc/?username=kenja-car-v4&label=Visitors&color=red&style=flat-square)"
 )
 
 # --- 1. 基本条件入力 ---
@@ -32,6 +32,7 @@ with st.container(border=True):
         dist = st.number_input("年間走行距離 (km)", value=10000, step=1000, format="%d")
     with col_base2:
         gas = st.selectbox("ガソリン単価 (円/L)", options=list(range(150, 201, 5)), index=5)
+        highway_freq = st.selectbox("高速道路の利用頻度", options=["ほぼ使わない", "月1〜2回程度", "週1回以上（頻繁）"], index=1)
     
     st.divider()
     ins_type = st.radio(
@@ -47,11 +48,9 @@ with st.container(border=True):
     with col_tire2:
         w_months = st.selectbox("冬タイヤ装着期間 (ヶ月)", options=[1, 2, 3, 4, 5, 6], index=2) if is_winter else 0
 
-# --- 2. 計算ロジック（修正版） ---
+# --- 2. 計算ロジック ---
 
 def get_resale_rate(years, is_kei, is_new):
-    """ネクステージ等の市場データに基づいた残価率表"""
-    # [3年, 4年, 5年, 6年, 7年, 8年, 9年, 10年]
     rates = {
         "kei_new": [0.65, 0.55, 0.50, 0.40, 0.30, 0.20, 0.15, 0.10],
         "kei_used": [0.55, 0.50, 0.45, 0.35, 0.25, 0.15, 0.10, 0.05],
@@ -65,15 +64,14 @@ def get_resale_rate(years, is_kei, is_new):
 def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price, change_fee):
     is_new = "新車" in age_label
     
-    # 1. 車両実質負担（残価計算）
+    # 車両実質負担
     resale_val = int(price * get_resale_rate(years, is_kei, is_new))
     actual_dep = (price - resale_val) if is_resale_included else price
     
-    # 2. 燃料代
+    # 燃料代
     fuel = (dist * years / mpg) * gas
     
-    # 3. 税金（13年超え重課税ロジック）
-    # 購入時の「経過年数」を推定
+    # 税金（13年超え重課税）
     start_age = 0 if is_new else (4 if "3〜5年" in age_label else (8 if "6〜9年" in age_label else 12))
     total_tax = 0
     for i in range(1, years + 1):
@@ -81,25 +79,29 @@ def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price,
         if is_kei:
             annual_tax = 12900 if current_age > 13 else 10800
         else:
-            annual_tax = 35000 if current_age > 13 else 30500 # 1.5L以下想定
+            annual_tax = 35000 if current_age > 13 else 30500 
         total_tax += annual_tax
     
-    # 4. 車検代（重量税増分含む）
+    # 車検代
     shaken_base = 60000 if is_kei else 100000
     shaken_count = years // 2
     shaken_total = shaken_count * (shaken_base * 1.2 if (start_age + years) > 13 else shaken_base)
     
-    # 5. 任意保険
+    # 任意保険
     base_ins = (35000 if is_kei else 45000)
     ins_rate = 0.025 if "万全" in ins_type else (0.015 if "安心" in ins_type else 0.0)
     ins_total = (base_ins + (price * ins_rate)) * years
     
-    # 6. タイヤ・メンテナンス（物理負荷 & 10万kmメンテ）
-    # 物理負荷補正（軽は回転数が多いためオイル等の消耗を1.2倍）
-    maint_factor = 1.2 if is_kei else 1.0
-    basic_maint = (15000 * years) * maint_factor 
+    # メンテナンス（物理負荷 & 高速頻度補正）
+    # 軽自動車は高速利用が多いと回転数負荷が激増するため係数をアップ
+    highway_factor = 1.0
+    if is_kei:
+        if highway_freq == "週1回以上（頻繁）": highway_factor = 1.4
+        elif highway_freq == "月1〜2回程度": highway_factor = 1.2
     
-    # 10万km目前メンテ（大物パーツ）
+    basic_maint = (15000 * years) * highway_factor
+    
+    # 10万km目前メンテ
     total_mileage = (start_age * 10000) + (dist * years)
     extra_maint = 0
     if total_mileage >= 100000:
@@ -107,16 +109,15 @@ def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price,
     
     tire_usage = (int(dist * years * 0.7 / 30000) * t_unit) 
     winter_cost = ((t_unit + w_price + (change_fee * years)) if is_winter else 0)
-    tire_maint_total = tire_usage + winter_cost + basic_maint + extra_maint
+    maint_total = tire_usage + winter_cost + basic_maint + extra_maint
     
-    total = int(actual_dep + fuel + total_tax + shaken_total + ins_total + tire_maint_total)
-    
-    return total, resale_val, int(actual_dep), int(fuel), int(total_tax), int(shaken_total), int(ins_total), int(tire_maint_total)
+    total = int(actual_dep + fuel + total_tax + shaken_total + ins_total + maint_total)
+    return total, resale_val, int(actual_dep), int(fuel), int(total_tax), int(shaken_total), int(ins_total), int(maint_total)
 
 # --- 3. 車両比較入力 ---
 st.markdown("<h3 style='font-size: 1.2rem; margin-bottom: 0.5rem;'>🚘 比較する車両の入力</h3>", unsafe_allow_html=True)
 
-resale_help = "【出典：ネクステージ等の市場データを参照】保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。軽自動車の方が残価率が高くなる市場特性を反映しています。"
+resale_help = "【出典：ネクステージ等の市場データを参照】保有期間に応じた一般的な残価率を算出。軽自動車の方が残価率が高くなる市場特性を反映しています。"
 is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True, help=resale_help)
 
 col_v1, col_v2 = st.columns(2)
@@ -157,9 +158,9 @@ diff = s_total - k_total
 if diff > 0: st.warning(f"普通車の方が **{diff:,}円** 高くなります。")
 elif diff < 0: st.success(f"軽自動車の方が **{abs(diff):,}円** 高くなります。")
 
-# --- 5. 賢者の計算根拠 ---
+# --- 5. 賢者の計算根拠（完全復元版） ---
 with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト"):
-    st.markdown("#### 1. 将来の予想売却価格（残価率）の算定基準")
+    st.markdown("### 1. 将来の予想売却価格（残価率）の算定基準")
     st.write("ネクステージ等の市場データに基づき、一般的な値落ち推移を設定。軽自動車の需要の高さや、中古車購入時の目減りの少なさを反映しています。")
     st.table({
         "保有期間": ["3年", "5年", "7年", "10年"],
@@ -169,8 +170,16 @@ with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト
         "普通(中古)": ["55%", "45%", "25%", "5%"]
     })
     
-    st.markdown("#### 2. 機械的負荷によるメンテナンス費の補正")
-    st.write("物理法則に基づき、排気量の小さい軽自動車は巡航時のエンジン回転数が普通車の1.5〜2倍になるため、金属疲労や油脂類の劣化が早いファクトを考慮し、整備費を補正しています。")
+    st.markdown("### 2. 機械的負荷によるメンテナンス費の補正")
+    st.markdown("""
+    **物理法則に基づき、エンジンの「総回転数」の差を維持費に反映しています。**
+    * **高回転による金属疲労**: 660ccの軽自動車は、巡航時のエンジン回転数が普通車の1.5〜2倍になります。同じ距離を走っても内部パーツの摩擦回数が多いため、オイル劣化や駆動系の摩耗が早いファクトを考慮し、整備費を補正しています。
+    * **高速道路利用の影響**: 高速走行時は特に軽自動車の回転数負荷が高まるため、設定された利用頻度に応じてメンテナンス係数を動的に加算しています。
+    """)
     
-    st.markdown("#### 3. 13年超え重課税と10万kmメンテナンスの壁")
-    st.write("高年式中古車で避けて通れない「13年超え増税」と、累計10万km到達時に発生する「大物パーツ（タイミングベルト、ウォーターポンプ等）」の交換費用を算入しています。")
+    st.markdown("### 3. 13年超え重課税と10万kmメンテナンスの壁")
+    st.markdown("""
+    **「安く買って長く乗る」際の隠れたコストを算出に反映しています。**
+    * **13年超えの重課税（経年車重課）**: 新車登録から13年を経過すると、自動車税が約15%、重量税が約40%増税されます。高年式中古車におけるこの増税タイミングを自動算出しています。
+    * **10万km目前の大物パーツ整備**: 走行距離が10万kmに達するタイミングで発生する「タイミングベルト、ウォーターポンプ、足回りブッシュ」等の交換費用（軽:10万、普通:12万〜）を特別整備費として算入しています。
+    """)
