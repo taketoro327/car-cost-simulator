@@ -9,45 +9,35 @@ st.markdown("""
     .block-container { max-width: 800px; padding-top: 2rem; }
     .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; }
     [data-testid="stMetricValue"] { font-size: 2rem !important; }
-    /* 内訳の文字サイズを少し調整 */
     .streamlit-expanderContent { font-size: 0.9rem; }
-    /* ラジオボタンの文字サイズをスマホで1行に収まるよう調整 */
     div[role="radiogroup"] label p { font-size: 0.85rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🚗 賢者の車選びシミュレーター")
-st.write("「軽自動車」と「普通車」の購入費と維持費をリアルに比較。")
+st.write("「軽自動車」と「普通車」の購入費・維持費・リセールを、物理法則と市場データに基づきリアルに比較。")
 
-# 【修正】より安定した別のカウンターサービス（Komarev）に変更しました
-# アプリのURLの文字列をIDとして利用してカウントします
+# アクセスカウンター（短縮IDでエラー回避）
 st.markdown(
-    "![Visitors](https://komarev.com/ghpvc/?username=car-cost-simulator-kdpswrwbjt9zuvwbsa2qdd&label=Visitors&color=red&style=flat-square)"
+    "![Visitors](https://komarev.com/ghpvc/?username=kenja-car-v3&label=Visitors&color=red&style=flat-square)"
 )
 
-# --- 1. 基本条件 ---
+# --- 1. 基本条件入力 ---
 with st.container(border=True):
     st.markdown("<h3 style='font-size: 1.2rem; margin-bottom: 0.5rem;'>🗓️ シミュレーションの基本条件</h3>", unsafe_allow_html=True)
     
     col_base1, col_base2 = st.columns(2)
-    
     with col_base1:
         years = st.selectbox("保有予定期間 (年)", options=[3, 4, 5, 6, 7, 8, 9, 10], index=2)
         dist = st.number_input("年間走行距離 (km)", value=10000, step=1000, format="%d")
-        
     with col_base2:
         gas = st.selectbox("ガソリン単価 (円/L)", options=list(range(150, 201, 5)), index=5)
-        
-    st.divider()
     
+    st.divider()
     ins_type = st.radio(
         "保険プラン（※全プラン対人対物無制限）", 
-        options=[
-            "基本プラン（車両保険なし）", 
-            "安心プラン（＋車両保険エコノミー）", 
-            "万全プラン（＋車両保険一般）"
-        ], 
-        index=1
+        options=["基本（車両なし）", "安心（＋車両エコノミー）", "万全（＋車両一般）"], 
+        index=1, horizontal=True
     )
 
     st.divider()
@@ -57,144 +47,130 @@ with st.container(border=True):
     with col_tire2:
         w_months = st.selectbox("冬タイヤ装着期間 (ヶ月)", options=[1, 2, 3, 4, 5, 6], index=2) if is_winter else 0
 
-# --- 計算ロジック ---
-def get_resale_price(p, y, is_new):
-    r = {3:0.6, 4:0.5, 5:0.4, 6:0.3, 7:0.2, 8:0.15, 9:0.1, 10:0.05} if is_new else {3:0.45, 4:0.35, 5:0.25, 6:0.2, 7:0.15, 8:0.1, 9:0.05, 10:0.03}
-    return int(p * r.get(y, 0.05))
+# --- 2. 計算ロジック（修正版） ---
 
-def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, change_fee):
-    resale_val = get_resale_price(price, years, is_new)
+def get_resale_rate(years, is_kei, is_new):
+    """ネクステージ等の市場データに基づいた残価率表"""
+    # [3年, 4年, 5年, 6年, 7年, 8年, 9年, 10年]
+    rates = {
+        "kei_new": [0.65, 0.55, 0.50, 0.40, 0.30, 0.20, 0.15, 0.10],
+        "kei_used": [0.55, 0.50, 0.45, 0.35, 0.25, 0.15, 0.10, 0.05],
+        "std_new": [0.55, 0.45, 0.40, 0.30, 0.20, 0.15, 0.10, 0.05],
+        "std_used": [0.55, 0.50, 0.45, 0.35, 0.25, 0.15, 0.10, 0.05]
+    }
+    key = ("kei" if is_kei else "std") + ("_new" if is_new else "_used")
+    idx = max(0, min(len(rates[key]) - 1, years - 3))
+    return rates[key][idx]
+
+def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price, change_fee):
+    is_new = "新車" in age_label
+    
+    # 1. 車両実質負担（残価計算）
+    resale_val = int(price * get_resale_rate(years, is_kei, is_new))
     actual_dep = (price - resale_val) if is_resale_included else price
     
+    # 2. 燃料代
     fuel = (dist * years / mpg) * gas
-    tax = (10800 if is_kei else 30500) * years
-    shaken = (years // 2) * (60000 if is_kei else 100000)
     
+    # 3. 税金（13年超え重課税ロジック）
+    # 購入時の「経過年数」を推定
+    start_age = 0 if is_new else (4 if "3〜5年" in age_label else (8 if "6〜9年" in age_label else 12))
+    total_tax = 0
+    for i in range(1, years + 1):
+        current_age = start_age + i
+        if is_kei:
+            annual_tax = 12900 if current_age > 13 else 10800
+        else:
+            annual_tax = 35000 if current_age > 13 else 30500 # 1.5L以下想定
+        total_tax += annual_tax
+    
+    # 4. 車検代（重量税増分含む）
+    shaken_base = 60000 if is_kei else 100000
+    shaken_count = years // 2
+    shaken_total = shaken_count * (shaken_base * 1.2 if (start_age + years) > 13 else shaken_base)
+    
+    # 5. 任意保険
     base_ins = (35000 if is_kei else 45000)
     ins_rate = 0.025 if "万全" in ins_type else (0.015 if "安心" in ins_type else 0.0)
     ins_total = (base_ins + (price * ins_rate)) * years
     
+    # 6. タイヤ・メンテナンス（物理負荷 & 10万kmメンテ）
+    # 物理負荷補正（軽は回転数が多いためオイル等の消耗を1.2倍）
+    maint_factor = 1.2 if is_kei else 1.0
+    basic_maint = (15000 * years) * maint_factor 
+    
+    # 10万km目前メンテ（大物パーツ）
+    total_mileage = (start_age * 10000) + (dist * years)
+    extra_maint = 0
+    if total_mileage >= 100000:
+        extra_maint = 100000 if is_kei else 120000
+    
     tire_usage = (int(dist * years * 0.7 / 30000) * t_unit) 
     winter_cost = ((t_unit + w_price + (change_fee * years)) if is_winter else 0)
-    tire_total = tire_usage + winter_cost
+    tire_maint_total = tire_usage + winter_cost + basic_maint + extra_maint
     
-    total = int(actual_dep + fuel + tax + shaken + ins_total + tire_total)
+    total = int(actual_dep + fuel + total_tax + shaken_total + ins_total + tire_maint_total)
     
-    return total, resale_val, int(actual_dep), int(fuel), int(tax), int(shaken), int(ins_total), int(tire_total)
+    return total, resale_val, int(actual_dep), int(fuel), int(total_tax), int(shaken_total), int(ins_total), int(tire_maint_total)
 
-# --- 2. 車両比較 ---
+# --- 3. 車両比較入力 ---
 st.markdown("<h3 style='font-size: 1.2rem; margin-bottom: 0.5rem;'>🚘 比較する車両の入力</h3>", unsafe_allow_html=True)
 
-resale_help = """
-**予想売却価格（残価）の計算根拠:**
-保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。
-"""
+resale_help = "【出典：ネクステージ等の市場データを参照】保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。軽自動車の方が残価率が高くなる市場特性を反映しています。"
 is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True, help=resale_help)
 
 col_v1, col_v2 = st.columns(2)
+age_options = ["新車（最新モデル）", "中古（3〜5年落ち）", "中古（6〜9年落ち）", "中古（10年落ち〜）"]
 
 with col_v1:
     with st.container(border=True):
-        st.markdown("<h4 style='font-size: 1.1rem; margin-bottom: 0.5rem;'>【A】軽自動車</h4>", unsafe_allow_html=True)
-        
-        k_age = st.selectbox("車両の状態・年式", ["新車（最新モデル）", "中古（3〜5年落ち程度）", "中古（10年落ち程度）"], key="k_age")
-        if "新車" in k_age:
-            k_is_new = True; k_default_p = 2000000; k_default_m = 22.0
-        elif "3〜5年" in k_age:
-            k_is_new = False; k_default_p = 1200000; k_default_m = 18.0
-        else:
-            k_is_new = False; k_default_p = 500000; k_default_m = 14.0
-            
-        k_p = st.number_input("購入価格 (円)", value=k_default_p, step=100000, format="%d", key="k_p")
-        k_m = st.number_input("実用燃費 (km/L)", value=k_default_m, step=1.0, key="k_m")
-        
-        st.markdown("<div style='height: 70px;'>※タイヤは軽自動車標準サイズを想定</div>", unsafe_allow_html=True)
-        
-        k_total, k_resale, k_dep, k_fuel, k_tax, k_shaken, k_ins, k_tire = calc_all(k_p, k_m, True, k_is_new, is_resale_included, 35000, 20000, 6000)
-        if is_resale_included:
-            st.info(f"💡 {years}年後の予想売却価格: **{k_resale:,}円**")
+        st.markdown("<h4 style='font-size: 1.1rem;'>【A】軽自動車</h4>", unsafe_allow_html=True)
+        k_age = st.selectbox("車両の状態", age_options, key="k_age")
+        k_p = st.number_input("購入価格 (円)", value=2000000 if "新車" in k_age else 1000000, step=100000, key="k_p")
+        k_m = st.number_input("実用燃費 (km/L)", value=22.0 if "新車" in k_age else 18.0, step=1.0, key="k_m")
+        k_total, k_resale, k_dep, k_fuel, k_tax, k_shaken, k_ins, k_tire = calc_all(k_p, k_m, True, k_age, is_resale_included, 35000, 20000, 6000)
+        if is_resale_included: st.info(f"💡 予想売却価格: **{k_resale:,}円**")
 
 with col_v2:
     with st.container(border=True):
-        st.markdown("<h4 style='font-size: 1.1rem; margin-bottom: 0.5rem;'>【B】普通車</h4>", unsafe_allow_html=True)
-        
-        s_age = st.selectbox("車両の状態・年式", ["新車（最新モデル）", "中古（3〜5年落ち程度）", "中古（10年落ち程度）"], index=1, key="s_age")
-        if "新車" in s_age:
-            s_is_new = True; s_default_p = 3500000; s_default_m = 20.0
-        elif "3〜5年" in s_age:
-            s_is_new = False; s_default_p = 2000000; s_default_m = 15.0
-        else:
-            s_is_new = False; s_default_p = 800000; s_default_m = 10.0
-            
-        s_p = st.number_input("購入価格 (円)", value=s_default_p, step=100000, format="%d", key="s_p")
-        s_m = st.number_input("実用燃費 (km/L)", value=s_default_m, step=1.0, key="s_m")
-        
-        s_tire_size = st.selectbox("タイヤサイズ", [
-            "15インチ以下（コンパクトカー等）", 
-            "16〜17インチ（ミドルクラス等）", 
-            "18インチ以上（SUV・高級車等）"
-        ], index=1)
-        
-        if "15" in s_tire_size:
-            s_t_unit = 40000; s_w_price = 40000; s_c_fee = 8000
-        elif "16" in s_tire_size:
-            s_t_unit = 80000; s_w_price = 60000; s_c_fee = 10000
-        else:
-            s_t_unit = 120000; s_w_price = 80000; s_c_fee = 12000
-            
-        s_total, s_resale, s_dep, s_fuel, s_tax, s_shaken, s_ins, s_tire = calc_all(s_p, s_m, False, s_is_new, is_resale_included, s_t_unit, s_w_price, s_c_fee)
-        if is_resale_included:
-            st.info(f"💡 {years}年後の予想売却価格: **{s_resale:,}円**")
+        st.markdown("<h4 style='font-size: 1.1rem;'>【B】普通車</h4>", unsafe_allow_html=True)
+        s_age = st.selectbox("車両の状態", age_options, index=1, key="s_age")
+        s_p = st.number_input("購入価格 (円)", value=3500000 if "新車" in s_age else 1800000, step=100000, key="s_p")
+        s_m = st.number_input("実用燃費 (km/L)", value=20.0 if "新車" in s_age else 15.0, step=1.0, key="s_m")
+        s_total, s_resale, s_dep, s_fuel, s_tax, s_shaken, s_ins, s_tire = calc_all(s_p, s_m, False, s_age, is_resale_included, 60000, 50000, 10000)
+        if is_resale_included: st.info(f"💡 予想売却価格: **{s_resale:,}円**")
 
-# --- 3. 結果発表 ---
+# --- 4. 結果表示 ---
 st.divider()
 st.markdown("<h3 style='font-size: 1.2rem; margin-bottom: 0.5rem;'>📊 算出結果（トータルコスト）</h3>", unsafe_allow_html=True)
-
 res_c1, res_c2 = st.columns(2)
-
 with res_c1:
     st.metric("軽自動車 合計", f"{k_total:,}円")
-    with st.expander("🔍 内訳を見る"):
-        st.write(f"- 車両実質負担額: {k_dep:,}円")
-        st.write(f"- ガソリン代: {k_fuel:,}円")
-        st.write(f"- 自動車税: {k_tax:,}円")
-        st.write(f"- 車検代: {k_shaken:,}円")
-        st.write(f"- 任意保険: {k_ins:,}円")
-        st.write(f"- タイヤ関連費: {k_tire:,}円")
-
+    with st.expander("🔍 内訳"):
+        st.write(f"- 車両実質負担: {k_dep:,}円\n- ガソリン代: {k_fuel:,}円\n- 自動車税等: {k_tax:,}円\n- 車検代: {k_shaken:,}円\n- 任意保険: {k_ins:,}円\n- メンテ・タイヤ: {k_tire:,}円")
 with res_c2:
     st.metric("普通車 合計", f"{s_total:,}円")
-    with st.expander("🔍 内訳を見る"):
-        st.write(f"- 車両実質負担額: {s_dep:,}円")
-        st.write(f"- ガソリン代: {s_fuel:,}円")
-        st.write(f"- 自動車税: {s_tax:,}円")
-        st.write(f"- 車検代: {s_shaken:,}円")
-        st.write(f"- 任意保険: {s_ins:,}円")
-        st.write(f"- タイヤ関連費: {s_tire:,}円")
+    with st.expander("🔍 内訳"):
+        st.write(f"- 車両実質負担: {s_dep:,}円\n- ガソリン代: {s_fuel:,}円\n- 自動車税等: {s_tax:,}円\n- 車検代: {s_shaken:,}円\n- 任意保険: {s_ins:,}円\n- メンテ・タイヤ: {s_tire:,}円")
 
 diff = s_total - k_total
+if diff > 0: st.warning(f"普通車の方が **{diff:,}円** 高くなります。")
+elif diff < 0: st.success(f"軽自動車の方が **{abs(diff):,}円** 高くなります。")
 
-if diff > 0:
-    st.warning(f"普通車の方が **{diff:,}円** 高くなります。")
-elif diff < 0:
-    st.success(f"軽自動車の方が **{abs(diff):,}円** 高くなります。")
-else:
-    st.info("両者のトータルコストは同じです。")
-
-# --- 4. 計算根拠 ---
-with st.expander("🧮 賢者の計算根拠・前提条件"):
-    resale_text = f"（購入価格 ー {years}年後の予想売却価格）" if is_resale_included else "（購入価格のみ ※売却なし）"
-    st.markdown(f"""
-    本シミュレーターは以下の条件で算出しています。
+# --- 5. 賢者の計算根拠 ---
+with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト"):
+    st.markdown("#### 1. 将来の予想売却価格（残価率）の算定基準")
+    st.write("ネクステージ等の市場データに基づき、一般的な値落ち推移を設定。軽自動車の需要の高さや、中古車購入時の目減りの少なさを反映しています。")
+    st.table({
+        "保有期間": ["3年", "5年", "7年", "10年"],
+        "軽(新車)": ["65%", "50%", "30%", "10%"],
+        "軽(中古)": ["55%", "45%", "25%", "5%"],
+        "普通(新車)": ["55%", "40%", "20%", "5%"],
+        "普通(中古)": ["55%", "45%", "25%", "5%"]
+    })
     
-    * **車両実質負担額**: {resale_text} をベースに計算。新車・中古の選択により残価率が異なります。
-    * **燃料代**: 走行距離 ÷ 実用燃費 × ガソリン単価 で算出。
-    * **自動車税**: 軽自動車 10,800円/年、普通車 30,500円/年。
-    * **車検代**: 2年に1回（軽: 6万、普通: 10万）と仮定。
-    * **任意保険**: プランに応じた料率を購入価格に乗じ、基本料を加算。
-    * **タイヤ関連費（消耗＋スタッドレス導入費＋毎年の履き替え工賃）**:
-      * **軽自動車**: タイヤ約3.5万円 / ホイール約2万円 / 履き替え工賃 6,000円(年2回分)
-      * **普通 15インチ以下**: タイヤ約4万円 / ホイール約4万円 / 履き替え工賃 8,000円(年2回分)
-      * **普通 16〜17インチ**: タイヤ約8万円 / ホイール約6万円 / 履き替え工賃 10,000円(年2回分)
-      * **普通 18インチ以上**: タイヤ約12万円 / ホイール約8万円 / 履き替え工賃 12,000円(年2回分)
-    """)
+    st.markdown("#### 2. 機械的負荷によるメンテナンス費の補正")
+    st.write("物理法則に基づき、排気量の小さい軽自動車は巡航時のエンジン回転数が普通車の1.5〜2倍になるため、金属疲労や油脂類の劣化が早いファクトを考慮し、整備費を補正しています。")
+    
+    st.markdown("#### 3. 13年超え重課税と10万kmメンテナンスの壁")
+    st.write("高年式中古車で避けて通れない「13年超え増税」と、累計10万km到達時に発生する「大物パーツ（タイミングベルト、ウォーターポンプ等）」の交換費用を算入しています。")
