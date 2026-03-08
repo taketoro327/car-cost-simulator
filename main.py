@@ -6,38 +6,47 @@ from PIL import Image
 # ページ設定
 st.set_page_config(page_title="賢者の車選びシミュレーター", page_icon="🚗")
 
-# --- 画像を丸く処理する関数 ---
-def get_image_base64(img_path):
+# --- 画像を丸く処理する関数（キャッシュ＆例外処理強化） ---
+@st.cache_data
+def get_image_base64(img_path, crop_circle=True):
     try:
         img = Image.open(img_path).convert("RGBA")
-        # 正方形にクロップ（中央合わせ）
-        width, height = img.size
-        min_dim = min(width, height)
-        left = (width - min_dim) / 2
-        top = (height - min_dim) / 2
-        right = (width + min_dim) / 2
-        bottom = (height + min_dim) / 2
-        img = img.crop((left, top, right, bottom))
+        
+        # アイコン用のみ正方形にクロップして丸く見せる準備
+        if crop_circle:
+            width, height = img.size
+            min_dim = min(width, height)
+            left = (width - min_dim) / 2
+            top = (height - min_dim) / 2
+            right = (width + min_dim) / 2
+            bottom = (height + min_dim) / 2
+            img = img.crop((left, top, right, bottom))
         
         buffered = BytesIO()
         img.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode()
-    except:
+    
+    except FileNotFoundError:
+        print(f"【警告】画像ファイルが見つかりません: {img_path}")
+        return None
+    except Exception as e:
+        print(f"【エラー】画像処理中に問題が発生しました ({img_path}): {e}")
         return None
 
-# アイコンの読み込み
-icon_base64 = get_image_base64("賢者アイコン用.png")
+# 画像の読み込み
+icon_base64 = get_image_base64("賢者アイコン用.png", crop_circle=True)
+# 登録アイコンは丸く切り取らずそのまま表示（★ファイル名を変更しました）
+sub_icon_base64 = get_image_base64("チャンネル登録アイコン.png", crop_circle=False) 
 
-# デザイン設定
+# デザイン設定（スマホ最適化のメディアクエリ追加）
 st.markdown("""
     <style>
-    /* 【修正】padding-topを2remから4remに増やし、上部の見切れを解消 */
+    /* 全体の基本設定 */
     .block-container { max-width: 800px; padding-top: 4rem; }
     .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; }
     [data-testid="stMetricValue"] { font-size: 2rem !important; }
     .streamlit-expanderContent { font-size: 0.85rem; line-height: 1.6; }
     div[role="radiogroup"] label p { font-size: 0.85rem !important; }
-    /* メインタイトルのサイズ調整 */
     h1 { font-size: 1.1rem !important; font-weight: bold; }
     
     /* ヘッダーエリアのレイアウト */
@@ -65,28 +74,68 @@ st.markdown("""
         margin: 0;
         line-height: 1.2;
     }
+    .youtube-link-area {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 5px;
+    }
     .youtube-link {
         font-size: 0.85rem;
         color: #ff4b4b;
         text-decoration: none;
-        margin-top: 3px;
+        font-weight: bold;
+    }
+    .sub-btn-img {
+        height: 24px; /* 登録アイコンの高さ調整 */
+        border-radius: 4px;
+        transition: transform 0.2s;
+    }
+    .sub-btn-img:hover {
+        transform: scale(1.05);
+    }
+
+    /* 📱 スマホ用レスポンシブ設定 */
+    @media (max-width: 768px) {
+        .block-container { padding-top: 2rem; } /* 上部の余白を詰める */
+        [data-testid="stMetricValue"] { font-size: 1.5rem !important; } /* 金額表示を少し小さく */
+        .header-box { gap: 10px; }
+        .header-icon { width: 55px; height: 55px; } /* スマホではアイコンを少し縮小 */
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- TOP：アイコン・タイトル・YouTubeリンク ---
+channel_url = "https://www.youtube.com/channel/UCAaiMudxwrWJ8aob8j2nr3w"
+sub_url = f"{channel_url}?sub_confirmation=1" # 登録確認ポップアップ用URL
+
+# 登録ボタンのHTML生成（画像がない場合はテキストリンクを表示）
+if sub_icon_base64:
+    sub_html = f'<a href="{sub_url}" target="_blank"><img src="data:image/png;base64,{sub_icon_base64}" class="sub-btn-img" alt="チャンネル登録"></a>'
+else:
+    sub_html = f'<a href="{sub_url}" target="_blank" style="font-size: 0.8rem; background-color: #ff0000; color: white; padding: 2px 8px; border-radius: 4px; text-decoration: none;">登録</a>'
+
 if icon_base64:
     header_html = f"""
     <div class="header-box">
         <img src="data:image/png;base64,{icon_base64}" class="header-icon">
         <div class="header-text">
             <div class="header-title">🚗 賢者の車選びシミュレーター</div>
-            <a href="https://www.youtube.com/channel/UCAaiMudxwrWJ8aob8j2nr3w" target="_blank" class="youtube-link">▶ YouTube 賢者の回顧録</a>
+            <div class="youtube-link-area">
+                <a href="{channel_url}" target="_blank" class="youtube-link">▶ YouTube 賢者の回顧録</a>
+                {sub_html}
+            </div>
         </div>
     </div>
     """
 else:
-    header_html = '<h1 style="font-size: 1.1rem;">🚗 賢者の車選びシミュレーター</h1>'
+    header_html = f"""
+    <h1 style="font-size: 1.1rem;">🚗 賢者の車選びシミュレーター</h1>
+    <div class="youtube-link-area">
+        <a href="{channel_url}" target="_blank" class="youtube-link">▶ YouTube 賢者の回顧録</a>
+        {sub_html}
+    </div>
+    """
 
 st.markdown(header_html, unsafe_allow_html=True)
 st.write("「軽自動車」と「普通車」の購入費・維持費・リセールを、物理法則と市場データに基づきリアルに比較。")
