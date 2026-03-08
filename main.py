@@ -19,10 +19,10 @@ st.markdown("""
 st.title("🚗 賢者の車選びシミュレーター")
 st.write("「軽自動車」と「普通車」の購入費と維持費をリアルに比較。")
 
-# 【追加】簡単アクセスカウンター（Hitsサービスを利用）
-# 共有いただいたURL（https://car-cost-simulator-kdpswrwbjt9zuvwbsa2qdd.streamlit.app）をベースにカウントします。
+# 【修正】より安定した別のカウンターサービス（Komarev）に変更しました
+# アプリのURLの文字列をIDとして利用してカウントします
 st.markdown(
-    "[![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fcar-cost-simulator-kdpswrwbjt9zuvwbsa2qdd.streamlit.app&count_bg=%23FF4B4B&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=訪問者数&edge_flat=false)](https://hits.seeyoufarm.com)"
+    "![Visitors](https://komarev.com/ghpvc/?username=car-cost-simulator-kdpswrwbjt9zuvwbsa2qdd&label=Visitors&color=red&style=flat-square)"
 )
 
 # --- 1. 基本条件 ---
