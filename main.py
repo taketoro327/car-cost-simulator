@@ -1,28 +1,96 @@
 import streamlit as st
+import base64
+from io import BytesIO
+from PIL import Image, ImageOps, ImageDraw
 
 # ページ設定
 st.set_page_config(page_title="賢者の車選びシミュレーター", page_icon="🚗")
 
+# --- 画像を丸くトリミングする関数 ---
+def get_rounded_icon(img_path):
+    try:
+        img = Image.open(img_path).convert("RGBA")
+        # 正方形にクロップ（中央合わせ）
+        width, height = img.size
+        min_dim = min(width, height)
+        left = (width - min_dim) / 2
+        top = (height - min_dim) / 2
+        right = (width + min_dim) / 2
+        bottom = (height + min_dim) / 2
+        img = img.crop((left, top, right, bottom))
+        
+        # 丸型マスクの作成
+        mask = Image.new("L", img.size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.ellipse((0, 0) + img.size, fill=255)
+        
+        # マスクを適用
+        output = ImageOps.fit(img, mask.size, centering=(0.5, 0.5))
+        output.putalpha(mask)
+        
+        # Base64エンコード
+        buffered = BytesIO()
+        output.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode()
+    except:
+        return None
+
+# アイコンの読み込み
+icon_base64 = get_rounded_icon("賢者アイコン用.jpg")
+
 # デザイン設定
-st.markdown("""
+st.markdown(f"""
     <style>
-    .block-container { max-width: 800px; padding-top: 2rem; }
-    .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; }
-    [data-testid="stMetricValue"] { font-size: 2rem !important; }
-    .streamlit-expanderContent { font-size: 0.85rem; line-height: 1.6; }
-    div[role="radiogroup"] label p { font-size: 0.85rem !important; }
-    /* メインタイトルのサイズ調整 */
-    h1 { font-size: 1.1rem !important; font-weight: bold; }
+    .block-container {{ max-width: 800px; padding-top: 2rem; }}
+    .stMetric {{ background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; }}
+    [data-testid="stMetricValue"] {{ font-size: 2rem !important; }}
+    .streamlit-expanderContent {{ font-size: 0.85rem; line-height: 1.6; }}
+    div[role="radiogroup"] label p {{ font-size: 0.85rem !important; }}
+    
+    /* ヘッダーエリアのスタイル */
+    .header-container {{
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
+    }}
+    .header-icon {{
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        margin-right: 15px;
+        border: 2px solid #ff4b4b;
+    }}
+    .header-title {{
+        font-size: 1.1rem !important;
+        font-weight: bold;
+        margin: 0;
+    }}
+    .youtube-link {{
+        font-size: 0.8rem;
+        color: #ff4b4b;
+        text-decoration: none;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
-# メインタイトル（サイズを1.1remに統一）
-st.markdown("# 🚗 賢者の車選びシミュレーター")
+# --- TOPエリア：アイコン付きタイトルとリンク ---
+icon_html = f'<img src="data:image/png;base64,{icon_base64}" class="header-icon">' if icon_base64 else "🚗 "
+
+st.markdown(f"""
+    <div class="header-container">
+        {icon_html}
+        <div>
+            <div class="header-title">賢者の車選びシミュレーター</div>
+            <a href="https://www.youtube.com/@Kanja_Kaikoroku" target="_blank" class="youtube-link">▶ YouTube 賢者の回顧録</a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 st.write("「軽自動車」と「普通車」の購入費・維持費・リセールを、物理法則と市場データに基づきリアルに比較。")
 
 # アクセスカウンター
 st.markdown(
-    "![Visitors](https://komarev.com/ghpvc/?username=kenja-car-v8&label=Visitors&color=red&style=flat-square)"
+    "![Visitors](https://komarev.com/ghpvc/?username=kenja-car-final-v2&label=Visitors&color=red&style=flat-square)"
 )
 
 # --- 1. 基本条件入力 ---
@@ -52,7 +120,6 @@ with st.container(border=True):
         w_months = st.selectbox("冬タイヤ装着期間 (ヶ月)", options=[1, 2, 3, 4, 5, 6], index=2) if is_winter else 0
 
 # --- 2. 計算ロジック ---
-
 def get_resale_rate(years, is_kei, is_new):
     rates = {
         "kei_new": [0.65, 0.55, 0.50, 0.40, 0.30, 0.20, 0.15, 0.10],
@@ -73,10 +140,8 @@ def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price,
     total_tax = 0
     for i in range(1, years + 1):
         current_age = start_age + i
-        if is_kei:
-            annual_tax = 12900 if current_age > 13 else 10800
-        else:
-            annual_tax = 35000 if current_age > 13 else 30500 
+        if is_kei: annual_tax = 12900 if current_age > 13 else 10800
+        else: annual_tax = 35000 if current_age > 13 else 30500 
         total_tax += annual_tax
     shaken_base = 60000 if is_kei else 100000
     shaken_count = years // 2
@@ -97,9 +162,8 @@ def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price,
     total = int(actual_dep + fuel + total_tax + shaken_total + ins_total + maint_total)
     return total, resale_val, int(actual_dep), int(fuel), int(total_tax), int(shaken_total), int(ins_total), int(maint_total)
 
-# --- 3. 車両比較入力 ---
+# --- 3. 車両入力 ---
 st.markdown("<h3 style='font-size: 1.1rem; margin-bottom: 0.5rem;'>🚘 比較する車両の入力</h3>", unsafe_allow_html=True)
-
 resale_help = "【出典：ネクステージ等の市場データを参照】保有期間に応じた一般的な残価率を算出。"
 is_resale_included = st.toggle("保有期間後の予想売却価格を計算に含める", value=True, help=resale_help)
 
@@ -130,7 +194,6 @@ with col_v2:
 
 # --- 4. 結果表示 ---
 st.divider()
-# 【修正】算出結果で改行し、2行目に（トータルコスト）を表示
 st.markdown("<h3 style='font-size: 1.1rem; margin-bottom: 0.5rem;'>📊 算出結果<br>（トータルコスト）</h3>", unsafe_allow_html=True)
 res_c1, res_c2 = st.columns(2)
 with res_c1:
@@ -148,7 +211,6 @@ elif diff < 0: st.success(f"軽自動車の方が **{abs(diff):,}円** 高くな
 
 # --- 5. 賢者の計算根拠 ---
 with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト"):
-    # 【修正】タイトルの文字サイズを 1.1rem に統一
     st.markdown("<h3 style='font-size: 1.1rem; margin-top: 0px;'>1. 将来の予想売却価格（残価率）の算定基準</h3>", unsafe_allow_html=True)
     st.write("ネクステージ等の市場データに基づき、一般的な値落ち推移を設定。軽自動車の需要の高さや、中古車購入時の目減りの少なさを反映しています。")
     st.table({"保有期間": ["3年", "5年", "7年", "10年"], "軽(新車)": ["65%", "50%", "30%", "10%"], "軽(中古)": ["55%", "45%", "25%", "5%"], "普通(新車)": ["55%", "40%", "20%", "5%"], "普通(中古)": ["55%", "45%", "25%", "5%"]})
