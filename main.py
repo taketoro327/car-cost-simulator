@@ -17,8 +17,13 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🚗 賢者の車選びシミュレーター")
-# 【変更】購入費と維持費に変更
 st.write("「軽自動車」と「普通車」の購入費と維持費をリアルに比較。")
+
+# 【追加】簡単アクセスカウンター（Hitsサービスを利用）
+# 共有いただいたURL（https://car-cost-simulator-kdpswrwbjt9zuvwbsa2qdd.streamlit.app）をベースにカウントします。
+st.markdown(
+    "[![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fcar-cost-simulator-kdpswrwbjt9zuvwbsa2qdd.streamlit.app&count_bg=%23FF4B4B&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=訪問者数&edge_flat=false)](https://hits.seeyoufarm.com)"
+)
 
 # --- 1. 基本条件 ---
 with st.container(border=True):
@@ -35,7 +40,6 @@ with st.container(border=True):
         
     st.divider()
     
-    # 【修正】保険プランの箇所の help（ツールチップ）のみを削除
     ins_type = st.radio(
         "保険プラン（※全プラン対人対物無制限）", 
         options=[
@@ -81,7 +85,6 @@ def calc_all(price, mpg, is_kei, is_new, is_resale_included, t_unit, w_price, ch
 # --- 2. 車両比較 ---
 st.markdown("<h3 style='font-size: 1.2rem; margin-bottom: 0.5rem;'>🚘 比較する車両の入力</h3>", unsafe_allow_html=True)
 
-# 【復元】売却価格のツールチップは戻しました
 resale_help = """
 **予想売却価格（残価）の計算根拠:**
 保有期間に応じた一般的な残価率を車両価格に乗じて算出しています。
