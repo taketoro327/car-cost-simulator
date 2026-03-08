@@ -6,10 +6,9 @@ from PIL import Image
 # ページ設定
 st.set_page_config(page_title="賢者の車選びシミュレーター", page_icon="🚗")
 
-# --- 画像を丸く処理する関数 (PNG対応版に修正) ---
+# --- 画像を丸く処理する関数 ---
 def get_image_base64(img_path):
     try:
-        # RGBAで読み込み、PNGの透明度などを維持しやすくする
         img = Image.open(img_path).convert("RGBA")
         # 正方形にクロップ（中央合わせ）
         width, height = img.size
@@ -21,19 +20,19 @@ def get_image_base64(img_path):
         img = img.crop((left, top, right, bottom))
         
         buffered = BytesIO()
-        # PNG形式で保存してエンコード
         img.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode()
     except:
         return None
 
-# ★ここで「.png」を読み込むように修正★
+# アイコンの読み込み
 icon_base64 = get_image_base64("賢者アイコン用.png")
 
 # デザイン設定
 st.markdown("""
     <style>
-    .block-container { max-width: 800px; padding-top: 2rem; }
+    /* 【修正】padding-topを2remから4remに増やし、上部の見切れを解消 */
+    .block-container { max-width: 800px; padding-top: 4rem; }
     .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; }
     [data-testid="stMetricValue"] { font-size: 2rem !important; }
     .streamlit-expanderContent { font-size: 0.85rem; line-height: 1.6; }
