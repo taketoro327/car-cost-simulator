@@ -173,7 +173,6 @@ with st.container(border=True):
 
 # --- 2. 計算ロジック ---
 
-# 【修正】市場ファクトに基づくシビアな残価率ロジック
 def get_resale_rate(years, is_kei, age_label):
     if is_kei:
         if "新車" in age_label:
@@ -230,15 +229,26 @@ def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price,
     
     ins_total = int((adjusted_base_ins + (price * ins_rate)) * years)
     
+    # メンテ・タイヤ代の計算
     highway_factor = 1.0
     if is_kei:
         if highway_freq == "週1回以上（頻繁）": highway_factor = 1.4
         elif highway_freq == "月1〜2回程度": highway_factor = 1.2
+    
+    # 基本メンテ代（年間1.5万円ベース × 高速割増）
     basic_maint = (15000 * years) * highway_factor
+    
+    # 10万km超過時の特別整備費
     total_mileage = (start_age * 10000) + (dist * years)
     extra_maint = 100000 if (is_kei and total_mileage >= 100000) else (120000 if total_mileage >= 100000 else 0)
-    tire_usage = (int(dist * years * 0.7 / 30000) * t_unit) 
+    
+    # 【修正】冬タイヤの装着期間から夏タイヤの摩耗割合（summer_ratio）を自動計算
+    summer_ratio = (12 - w_months) / 12.0 if is_winter else 1.0
+    # 夏タイヤの消耗・買い替え費用（累計3万kmごと）
+    tire_usage = (int(dist * years * summer_ratio / 30000) * t_unit) 
+    # 冬タイヤ関連費（導入費＋履き替え工賃）
     winter_cost = ((t_unit + w_price + (change_fee * years)) if is_winter else 0)
+    
     maint_total = tire_usage + winter_cost + basic_maint + extra_maint
     
     total = int(actual_dep + fuel + total_tax + shaken_total + ins_total + maint_total)
@@ -300,7 +310,6 @@ elif diff < 0: st.success(f"軽自動車の方が **{abs(diff):,}円** 高くな
 
 # --- 5. 賢者の計算根拠 ---
 with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト", expanded=False):
-    # 【追加】ファクトに基づく残価率の解説
     st.markdown("<h3 style='font-size: 1.1rem; margin-top: 0px;'>1. 忖度なしの予想売却価格（残価率）算定ロジック</h3>", unsafe_allow_html=True)
     st.markdown("""
     中古車市場のリアルな取引データに基づき、「購入時の年式」と「保有期間」を合算したシビアな値落ち推移を設定しています。
@@ -309,6 +318,7 @@ with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト
     * **普通車の現実（輸出需要）**: 新車時の値落ちは激しいですが、海外輸出の需要があるため、10年落ちや過走行になっても鉄くずにならず、底値（数万円〜十数万円）が残りやすい市場ファクトを組み込んでいます。
     """)
     
+    # 【追加・修正】基本メンテと夏タイヤの解説を明確化
     st.markdown("<h3 style='font-size: 1.1rem;'>2. 基本維持費の計算式と単価設定</h3>", unsafe_allow_html=True)
     resale_text = "（購入価格 － 保有期間後の予想売却価格）" if is_resale_included else "（購入価格のみ ※売却なし）"
     st.markdown(f"""
@@ -316,7 +326,9 @@ with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト
     * **燃料代**: 走行距離 ÷ 実用燃費 × ガソリン単価（{gas}円）で算出。
     * **自動車税**: 軽自動車 10,800円/年、普通車 30,500円/年（1.5L以下を想定）。
     * **車検代**: 2年に1回（軽: 6万、普通: 10万）と仮定。
-    * **タイヤ関連費（消耗＋スタッドレス導入費＋毎年の履き替え工賃）**:
+    * **基本メンテナンス代**: エンジンオイルや消耗品代として「年間15,000円」をベースに設定しています。
+    * **夏タイヤの消耗・買い替え**: 走行距離「累計30,000kmごと」に新品への交換費用（タイヤ4本分）が発生するよう計算。冬タイヤの装着期間に応じて、夏タイヤの摩耗割合も自動で減算調整されます。
+    * **冬タイヤ関連費（スタッドレス導入＋毎年の履き替え工賃）**:
       * **軽自動車**: タイヤ約3.5万 / ホイール約2万 / 工賃年0.6万
       * **普通 15インチ以下**: タイヤ約4万 / ホイール約4万 / 工賃年0.8万
       * **普通 16〜17インチ**: タイヤ約8万 / ホイール約6万 / 工賃年1.0万
@@ -325,8 +337,8 @@ with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト
 
     st.markdown("<h3 style='font-size: 1.1rem;'>3. 機械的負荷・物理法則による補正</h3>", unsafe_allow_html=True)
     st.markdown("""
-    * **高回転による金属疲労**: 660ccの軽自動車は巡航時のエンジン回転数が普通車の1.5〜2倍になります。摩擦回数が多いことによるオイル劣化や駆動系の摩耗を考慮し、整備費を補正しています。
-    * **高速道路利用の影響**: 軽自動車は高速走行時の負荷が顕著なため、利用頻度に応じてメンテナンス係数を動的に加算しています。
+    * **高回転による金属疲労**: 660ccの軽自動車は巡航時のエンジン回転数が普通車の1.5〜2倍になります。摩擦回数が多いことによるオイル劣化や駆動系の摩耗を考慮し、整備費（基本メンテナンス代）を補正しています。
+    * **高速道路利用の影響**: 軽自動車は高速走行時の負荷が顕著なため、利用頻度に応じてメンテナンス係数を動的に加算（最大1.4倍）しています。
     """)
     
     st.markdown("<h3 style='font-size: 1.1rem;'>4. 13年超え重課税と10万kmメンテナンスの壁</h3>", unsafe_allow_html=True)
