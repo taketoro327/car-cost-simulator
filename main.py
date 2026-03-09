@@ -88,7 +88,7 @@ st.markdown("""
         font-weight: bold;
     }
     .sub-btn-img {
-        /* 【修正】登録アイコンの高さを1.7倍に (24px -> 41px) */
+        /* 登録アイコンの高さを1.7倍に (24px -> 41px) */
         height: 41px; 
         border-radius: 4px;
         transition: transform 0.2s;
@@ -97,7 +97,7 @@ st.markdown("""
         transform: scale(1.05);
     }
 
-    /* 📱 スマホ用レスポンセシブ設定 */
+    /* 📱 スマホ用レスポンシブ設定 */
     @media (max-width: 768px) {
         /* スマホ表示でも上部の余白を確保し、隠れを解消 */
         .block-container { padding-top: 60px; } 
@@ -161,10 +161,13 @@ with st.container(border=True):
         highway_freq = st.selectbox("高速道路の利用頻度", options=["ほぼ使わない", "月1〜2回程度", "週1回以上（頻繁）"], index=1)
     
     st.divider()
-    ins_type = st.radio(
-        "保険プラン（※全プラン対人対物無制限）", 
-        options=["基本（車両なし）", "安心（＋車両エコノミー）", "万全（＋車両一般）"], 
-        index=1, horizontal=True
+    # 【追加】運転者の等級レベル設定
+    st.markdown("<h4 style='font-size: 1.0rem;'>🛡️ 任意保険の基本設定（ネット型ベース）</h4>", unsafe_allow_html=True)
+    driver_grade = st.radio(
+        "現在の運転者の等級レベル（目安）",
+        options=["新規・若年層（6等級前後）", "平均的なドライバー（10〜14等級程度）", "優良・ベテラン（20等級）"],
+        index=1, horizontal=True,
+        help="等級に応じてベースとなる保険料金が変動します（新規は約1.8倍、優良は約半額）。"
     )
 
     st.divider()
@@ -187,13 +190,15 @@ def get_resale_rate(years, is_kei, is_new):
     idx = max(0, min(len(rates[key]) - 1, years - 3))
     return rates[key][idx]
 
-def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price, change_fee):
+# 【修正】引数に driver_grade と ins_plan を追加
+def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price, change_fee, d_grade, i_plan):
     is_new = "新車" in age_label
     resale_val = int(price * get_resale_rate(years, is_kei, is_new))
     actual_dep = (price - resale_val) if is_resale_included else price
     fuel = (dist * years / mpg) * gas
     start_age = 0 if is_new else (4 if "3〜5年" in age_label else (8 if "6〜9年" in age_label else 12))
     total_tax = 0
+    
     for i in range(1, years + 1):
         current_age = start_age + i
         if is_kei:
@@ -201,12 +206,25 @@ def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price,
         else:
             annual_tax = 35000 if current_age > 13 else 30500 
         total_tax += annual_tax
+        
     shaken_base = 60000 if is_kei else 100000
     shaken_count = years // 2
     shaken_total = shaken_count * (shaken_base * 1.2 if (start_age + years) > 13 else shaken_base)
+    
+    # 【保険料ロジック修正】
     base_ins = (35000 if is_kei else 45000)
-    ins_rate = 0.025 if "万全" in ins_type else (0.015 if "安心" in ins_type else 0.0)
-    ins_total = (base_ins + (price * ins_rate)) * years
+    if "新規" in d_grade: grade_factor = 1.8
+    elif "優良" in d_grade: grade_factor = 0.5
+    else: grade_factor = 1.0
+    
+    adjusted_base_ins = base_ins * grade_factor
+    
+    if "万全" in i_plan: ins_rate = 0.025
+    elif "安心" in i_plan: ins_rate = 0.015
+    else: ins_rate = 0.0
+    
+    ins_total = int((adjusted_base_ins + (price * ins_rate)) * years)
+    
     highway_factor = 1.0
     if is_kei:
         if highway_freq == "週1回以上（頻繁）": highway_factor = 1.4
@@ -217,8 +235,9 @@ def calc_all(price, mpg, is_kei, age_label, is_resale_included, t_unit, w_price,
     tire_usage = (int(dist * years * 0.7 / 30000) * t_unit) 
     winter_cost = ((t_unit + w_price + (change_fee * years)) if is_winter else 0)
     maint_total = tire_usage + winter_cost + basic_maint + extra_maint
+    
     total = int(actual_dep + fuel + total_tax + shaken_total + ins_total + maint_total)
-    return total, resale_val, int(actual_dep), int(fuel), int(total_tax), int(shaken_total), int(ins_total), int(maint_total)
+    return total, resale_val, int(actual_dep), int(fuel), int(total_tax), int(shaken_total), ins_total, int(maint_total)
 
 # --- 3. 車両比較入力 ---
 st.markdown("<h3 style='font-size: 1.1rem; margin-bottom: 0.5rem;'>🚘 比較する車両の入力</h3>", unsafe_allow_html=True)
@@ -228,6 +247,7 @@ is_resale_included = st.toggle("保有期間後の予想売却価格を計算に
 
 col_v1, col_v2 = st.columns(2)
 age_options = ["新車（最新モデル）", "中古（3〜5年落ち）", "中古（6〜9年落ち）", "中古（10年落ち〜）"]
+ins_plan_options = ["基本（車両なし）", "安心（＋車両エコノミー）", "万全（＋車両一般）"]
 
 with col_v1:
     with st.container(border=True):
@@ -235,7 +255,10 @@ with col_v1:
         k_age = st.selectbox("車両の状態", age_options, key="k_age")
         k_p = st.number_input("購入価格 (円)", value=2000000 if "新車" in k_age else 1000000, step=100000, key="k_p")
         k_m = st.number_input("実用燃費 (km/L)", value=22.0 if "新車" in k_age else 18.0, step=1.0, key="k_m")
-        k_total, k_resale, k_dep, k_fuel, k_tax, k_shaken, k_ins, k_tire = calc_all(k_p, k_m, True, k_age, is_resale_included, 35000, 20000, 6000)
+        # 【追加】車両ごとの保険プラン選択
+        k_ins = st.selectbox("車両保険プラン", ins_plan_options, index=2 if "新車" in k_age else 0, key="k_ins_plan")
+        
+        k_total, k_resale, k_dep, k_fuel, k_tax, k_shaken, k_ins_cost, k_tire = calc_all(k_p, k_m, True, k_age, is_resale_included, 35000, 20000, 6000, driver_grade, k_ins)
         if is_resale_included: st.info(f"💡 予想売却価格: **{k_resale:,}円**")
 
 with col_v2:
@@ -245,10 +268,14 @@ with col_v2:
         s_p = st.number_input("購入価格 (円)", value=3500000 if "新車" in s_age else 1800000, step=100000, key="s_p")
         s_m = st.number_input("実用燃費 (km/L)", value=20.0 if "新車" in s_age else 15.0, step=1.0, key="s_m")
         s_tire_size = st.selectbox("タイヤサイズ", ["15インチ以下", "16〜17インチ", "18インチ以上"], index=1)
+        # 【追加】車両ごとの保険プラン選択
+        s_ins = st.selectbox("車両保険プラン", ins_plan_options, index=2 if "新車" in s_age else 0, key="s_ins_plan")
+        
         if "15" in s_tire_size: s_t_unit, s_w_price, s_c_fee = 40000, 40000, 8000
         elif "16" in s_tire_size: s_t_unit, s_w_price, s_c_fee = 80000, 60000, 10000
         else: s_t_unit, s_w_price, s_c_fee = 120000, 80000, 12000
-        s_total, s_resale, s_dep, s_fuel, s_tax, s_shaken, s_ins, s_tire = calc_all(s_p, s_m, False, s_age, is_resale_included, s_t_unit, s_w_price, s_c_fee)
+        
+        s_total, s_resale, s_dep, s_fuel, s_tax, s_shaken, s_ins_cost, s_tire = calc_all(s_p, s_m, False, s_age, is_resale_included, s_t_unit, s_w_price, s_c_fee, driver_grade, s_ins)
         if is_resale_included: st.info(f"💡 予想売却価格: **{s_resale:,}円**")
 
 # --- 4. 結果表示 ---
@@ -259,12 +286,12 @@ with res_c1:
     st.metric("軽自動車 合計", f"{k_total:,}円")
     # デフォルトで閉じる設定を追加
     with st.expander("🔍 内訳", expanded=False):
-        st.write(f"- 車両実質負担: {k_dep:,}円\n- ガソリン代: {k_fuel:,}円\n- 自動車税等: {k_tax:,}円\n- 車検代: {k_shaken:,}円\n- 任意保険: {k_ins:,}円\n- メンテ・タイヤ: {k_tire:,}円")
+        st.write(f"- 車両実質負担: {k_dep:,}円\n- ガソリン代: {k_fuel:,}円\n- 自動車税等: {k_tax:,}円\n- 車検代: {k_shaken:,}円\n- 任意保険: {k_ins_cost:,}円\n- メンテ・タイヤ: {k_tire:,}円")
 with res_c2:
     st.metric("普通車 合計", f"{s_total:,}円")
     # デフォルトで閉じる設定を追加
     with st.expander("🔍 内訳", expanded=False):
-        st.write(f"- 車両実質負担: {s_dep:,}円\n- ガソリン代: {s_fuel:,}円\n- 自動車税等: {s_tax:,}円\n- 車検代: {s_shaken:,}円\n- 任意保険: {s_ins:,}円\n- メンテ・タイヤ: {s_tire:,}円")
+        st.write(f"- 車両実質負担: {s_dep:,}円\n- ガソリン代: {s_fuel:,}円\n- 自動車税等: {s_tax:,}円\n- 車検代: {s_shaken:,}円\n- 任意保険: {s_ins_cost:,}円\n- メンテ・タイヤ: {s_tire:,}円")
 
 diff = s_total - k_total
 if diff > 0: st.warning(f"普通車の方が **{diff:,}円** 高くなります。")
@@ -284,7 +311,6 @@ with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト
     * **燃料代**: 走行距離 ÷ 実用燃費 × ガソリン単価（{gas}円）で算出。
     * **自動車税**: 軽自動車 10,800円/年、普通車 30,500円/年（1.5L以下を想定）。
     * **車検代**: 2年に1回（軽: 6万、普通: 10万）と仮定。
-    * **任意保険**: プランに応じた料率を購入価格に乗じ、基本料を加算。
     * **タイヤ関連費（消耗＋スタッドレス導入費＋毎年の履き替え工賃）**:
       * **軽自動車**: タイヤ約3.5万 / ホイール約2万 / 工賃年0.6万
       * **普通 15インチ以下**: タイヤ約4万 / ホイール約4万 / 工賃年0.8万
@@ -302,4 +328,12 @@ with st.expander("🧮 賢者の計算根拠・物理法則と市場ファクト
     st.markdown("""
     * **13年超えの重課税**: 新車登録から13年を経過すると、自動車税が約15%、重量税が約40%増税されます。高年式車におけるこの増税分を自動算出しています。
     * **10万km目前の大物パーツ整備**: 累計10万km到達時に発生する「タイミングベルト、ウォーターポンプ、足回り」等の交換費用（軽:10万、普通:12万）を特別整備費として算入しています。
+    """)
+
+    # 【追加】任意保険の計算ロジック説明
+    st.markdown("<h3 style='font-size: 1.1rem;'>5. 任意保険のリアルな算出ロジック</h3>", unsafe_allow_html=True)
+    st.markdown("""
+    大手ネット型自動車保険の相場を基準に、個人の状況と購入プランに合わせた実戦的な金額を算出します。
+    * **運転者の等級レベル**: 事故歴や年齢によるベース保険料の差を、3段階の係数（新規・若年 約1.8倍 / 平均 1.0倍 / 優良・20等級 約0.5倍）で反映しています。
+    * **車両保険（車両ごとの個別設定）**: 購入する車の価格に対して、プランごとの料率（なし 0% / エコノミー 約1.5% / 一般 約2.5%）を上乗せ。「新車は手厚く、乗り潰す中古車は車両保険なし」といった、実際の購入心理に沿った比較が可能です。
     """)
