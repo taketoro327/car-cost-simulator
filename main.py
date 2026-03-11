@@ -3,7 +3,7 @@ import base64
 from io import BytesIO
 from PIL import Image
 import re
-import time  # 【追加】アクセスカウンターのキャッシュ対策用
+import time  # アクセスカウンターのキャッシュ対策用
 
 # ページ設定
 st.set_page_config(page_title="賢者の車選びシミュレーター", page_icon="🚗")
@@ -100,9 +100,9 @@ else:
 st.markdown(header_html, unsafe_allow_html=True)
 st.write("「軽自動車」と「普通車」の購入費・維持費・リセールを、物理法則と市場データに基づきリアルに比較。")
 
-# 【修正】アクセスカウンター（キャッシュ対策版：末尾にタイムスタンプを付与）
+# 【修正】PV重視のアクセスカウンター（リロードのたびにカウント、左が今日・右が累計）
 st.markdown(
-    f"![Visitors](https://komarev.com/ghpvc/?username=kenja-car-v11&label=Visitors&color=red&style=flat-square&t={int(time.time())})"
+    f"![PV Counter](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=kenja-car-simulator-v12&count_bg=%23FF4B4B&title_bg=%23555555&title=PV&edge_flat=true&t={int(time.time())})"
 )
 
 # --- 1. 基本条件入力 ---
@@ -239,7 +239,6 @@ with col_v1:
 with col_v2:
     with st.container(border=True):
         st.markdown("<h4 style='font-size: 1.1rem;'>【B】普通車</h4>", unsafe_allow_html=True)
-        # デフォルトを5年落ちに設定
         s_age = st.selectbox("車両の状態", age_options, index=5, key="s_age")
         s_p = st.number_input("購入価格 (円)", value=3500000 if "新車" in s_age else 1800000, step=100000, key="s_p")
         s_m = st.number_input("実用燃費 (km/L)", value=20.0 if "新車" in s_age else 15.0, step=1.0, key="s_m")
