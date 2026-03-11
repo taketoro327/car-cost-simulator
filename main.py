@@ -99,11 +99,8 @@ else:
 st.markdown(header_html, unsafe_allow_html=True)
 st.write("「軽自動車」と「普通車」の購入費・維持費・リセールを、物理法則と市場データに基づきリアルに比較。")
 
-# 【修正】PV重視のアクセスカウンター（HTMLタグで確実に表示）
-st.markdown(
-    '<img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=kenja-car-simulator-v12&count_bg=%23FF4B4B&title_bg=%23555555&title=PV&edge_flat=true" alt="PV Counter">',
-    unsafe_allow_html=True
-)
+# 【修正】安定稼働するPVカウンター（hits.shを使用。今日/累計を表示し、リロードで確実にカウント）
+st.markdown("![PV Counter](https://hits.sh/kenja-car.streamlit.app/v12.svg?view=today-total&label=PV&color=ff4b4b)")
 
 # --- 1. 基本条件入力 ---
 with st.container(border=True):
@@ -136,7 +133,6 @@ with st.container(border=True):
 # --- 2. 計算ロジック（マスター下落曲線） ---
 
 def get_master_value(age, is_kei):
-    # 新車時を100%(1.0)とした絶対価値の推移
     if is_kei:
         curve = [1.0, 0.80, 0.70, 0.60, 0.50, 0.40, 0.30, 0.20, 0.10, 0.05, 0.0]
         idx = min(age, 10)
@@ -239,7 +235,6 @@ with col_v1:
 with col_v2:
     with st.container(border=True):
         st.markdown("<h4 style='font-size: 1.1rem;'>【B】普通車</h4>", unsafe_allow_html=True)
-        # デフォルトを5年落ちに設定
         s_age = st.selectbox("車両の状態", age_options, index=5, key="s_age")
         s_p = st.number_input("購入価格 (円)", value=3500000 if "新車" in s_age else 1800000, step=100000, key="s_p")
         s_m = st.number_input("実用燃費 (km/L)", value=20.0 if "新車" in s_age else 15.0, step=1.0, key="s_m")
